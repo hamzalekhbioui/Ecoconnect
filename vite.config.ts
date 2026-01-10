@@ -11,7 +11,20 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['uncastrated-amicably-mike.ngrok-free.dev'],
+    // This allows the server to be accessible externally
+    host: '0.0.0.0',
+    // This tells Vite: "Don't block the connection, no matter what the URL is"
+    allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001', // Your local backend port
+        changeOrigin: true,
+        secure: false,
+        // Removes '/api' prefix before sending to backend
+        // e.g., /api/chat -> /chat
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
   },
   test: {
     globals: true,
@@ -20,4 +33,3 @@ export default defineConfig({
     include: ['**/*.{test,spec}.{ts,tsx}'],
   },
 });
-

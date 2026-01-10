@@ -26,10 +26,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 return 'Dashboard';
             case 'admin-users':
                 return 'User Management';
+            case 'admin-communities':
+                return 'Community Management';
             case 'admin-resources':
                 return 'Resource Management';
             case 'admin-marketplace':
                 return 'Marketplace Management';
+            case 'admin-reports':
+                return 'User Reports';
             case 'admin-events':
                 return 'Event Management';
             default:

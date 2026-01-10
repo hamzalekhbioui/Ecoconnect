@@ -26,6 +26,8 @@ import { UserManagementView } from './frontend/features/admin/components/UserMan
 import { ResourceManagementView } from './frontend/features/admin/components/ResourceManagementView';
 import { EventManagementView } from './frontend/features/admin/components/EventManagementView';
 import { AdminMarketplaceView } from './frontend/features/admin/components/AdminMarketplaceView';
+import { AdminCommunitiesView } from './frontend/features/admin/components/AdminCommunitiesView';
+import { AdminReportsView } from './frontend/features/admin/components/AdminReportsView';
 
 // Loading component
 const LoadingScreen = () => (
@@ -70,6 +72,7 @@ const MainLayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }
       'communities': '/communities',
       'ai-concierge': '/ai-concierge',
       'accueil': '/accueil',
+      'messaging': '/messaging',
     };
     navigate(routeMap[page] || `/${page}`);
   };
@@ -105,8 +108,10 @@ const AdminLayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children 
     const routeMap: Record<string, string> = {
       'admin-dashboard': '/admin/dashboard',
       'admin-users': '/admin/users',
+      'admin-communities': '/admin/communities',
       'admin-resources': '/admin/resources',
       'admin-marketplace': '/admin/marketplace',
+      'admin-reports': '/admin/reports',
       'admin-events': '/admin/events',
       'admin-login': '/admin/login',
       'home': '/',
@@ -268,6 +273,12 @@ function AppContent() {
           </AdminLayoutWrapper>
         } />
 
+        <Route path="/admin/communities" element={
+          <AdminLayoutWrapper>
+            <AdminCommunitiesView />
+          </AdminLayoutWrapper>
+        } />
+
         <Route path="/admin/resources" element={
           <AdminLayoutWrapper>
             <ResourceManagementView onNavigate={(page) => navigate(`/${page.replace('admin-', 'admin/')}`)} />
@@ -277,6 +288,12 @@ function AppContent() {
         <Route path="/admin/marketplace" element={
           <AdminLayoutWrapper>
             <AdminMarketplaceView onNavigate={(page) => navigate(`/${page.replace('admin-', 'admin/')}`)} />
+          </AdminLayoutWrapper>
+        } />
+
+        <Route path="/admin/reports" element={
+          <AdminLayoutWrapper>
+            <AdminReportsView onNavigate={(page) => navigate(`/${page.replace('admin-', 'admin/')}`)} />
           </AdminLayoutWrapper>
         } />
 

@@ -6,8 +6,9 @@ async function bootstrap() {
     const app = await NestFactory.create(AppModule);
 
     // Enable CORS for frontend connection
+    // Using 'true' allows any origin, which is needed for Ngrok tunneling
     app.enableCors({
-        origin: ['http://localhost:5173', 'http://localhost:3000'],
+        origin: true,
         methods: ['GET', 'POST'],
         credentials: true,
     });

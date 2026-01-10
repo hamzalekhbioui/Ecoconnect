@@ -1,7 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
-import { MOCK_SUB_COMMUNITIES, MOCK_COMMUNITY_MEMBERS, MOCK_COMMUNITIES } from '../data/mockCommunityData';
+import { supabase } from '../../../config/supabase';
+import { Community, SubCommunity, CommunityMember } from '../../../types';
+import { Loader2 } from 'lucide-react';
+import { FeedList } from './FeedList';
 
 type TabType = 'feed' | 'directory' | 'projects' | 'resources' | 'events';
 
@@ -19,36 +22,7 @@ const TABS: TabConfig[] = [
     { id: 'events', label: 'Events', icon: 'event' },
 ];
 
-// Mock data for dashboard content
-const MOCK_POSTS = [
-    {
-        id: 'p1',
-        author: 'Sarah Green',
-        avatar: 'https://picsum.photos/seed/sarah/200/200',
-        content: 'Just published our new guide on eco-lodge certification standards. Check it out in the Resources tab!',
-        timestamp: '2 hours ago',
-        likes: 24,
-        comments: 8,
-    },
-    {
-        id: 'p2',
-        author: 'Jordan Lee',
-        avatar: 'https://picsum.photos/seed/jordan/200/200',
-        content: 'Exciting news! Our community just reached 500 members. Thank you all for being part of this journey.',
-        timestamp: '5 hours ago',
-        likes: 89,
-        comments: 32,
-    },
-    {
-        id: 'p3',
-        author: 'Alex Rivera',
-        avatar: 'https://picsum.photos/seed/alex/200/200',
-        content: 'Reminder: Our monthly virtual meetup is happening this Friday at 3 PM CET. Topic: "Sustainable Tourism Post-2025"',
-        timestamp: '1 day ago',
-        likes: 45,
-        comments: 12,
-    },
-];
+// NOTE: MOCK_POSTS removed - now using real data via FeedList component
 
 const MOCK_PROJECTS = [
     {
@@ -134,40 +108,123 @@ const MOCK_EVENTS = [
     },
 ];
 
+// Mock members for directory (to be replaced with real data)
+const MOCK_MEMBERS = [
+    {
+        id: 'cm1',
+        role: 'admin',
+        status: 'approved',
+        user: {
+            fullName: 'Alex Rivera',
+            avatarUrl: 'https://picsum.photos/seed/alex/200/200',
+            bio: 'Sustainable architecture enthusiast',
+            skills: ['Sustainability', 'Architecture', 'Community Building'],
+        },
+    },
+    {
+        id: 'cm2',
+        role: 'moderator',
+        status: 'approved',
+        user: {
+            fullName: 'Sarah Green',
+            avatarUrl: 'https://picsum.photos/seed/sarah/200/200',
+            bio: 'Eco-tourism consultant',
+            skills: ['Tourism', 'Consulting', 'Marketing'],
+        },
+    },
+    {
+        id: 'cm3',
+        role: 'member',
+        status: 'approved',
+        user: {
+            fullName: 'Jordan Lee',
+            avatarUrl: 'https://picsum.photos/seed/jordan/200/200',
+            bio: 'Travel blogger and photographer',
+            skills: ['Photography', 'Content Creation', 'Travel'],
+        },
+    },
+];
+
 export const SubCommunityDashboard: React.FC = () => {
     const { slug, subId } = useParams<{ slug: string; subId: string }>();
     const navigate = useNavigate();
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user, profile } = useAuth();
 
     const [activeTab, setActiveTab] = useState<TabType>('feed');
     const [skillFilter, setSkillFilter] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [parentCommunity, setParentCommunity] = useState<Community | null>(null);
+    const [subCommunity, setSubCommunity] = useState<SubCommunity | null>(null);
 
-    // Find sub-community
-    const subCommunity = useMemo(() =>
-        MOCK_SUB_COMMUNITIES.find(sc => sc.id === subId),
-        [subId]
-    );
+    // Fetch data from Supabase
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
 
-    // Find parent community
-    const parentCommunity = useMemo(() =>
-        MOCK_COMMUNITIES.find(c => c.id === subCommunity?.parentCommunityId),
-        [subCommunity]
-    );
+                // Fetch parent community by slug
+                const { data: communityData } = await supabase
+                    .from('communities')
+                    .select('*')
+                    .eq('slug', slug)
+                    .single();
 
-    // Get members (mock - in real app would filter by sub-community)
-    const members = useMemo(() => {
-        let filtered = MOCK_COMMUNITY_MEMBERS.filter(m => m.status === 'approved');
-        if (skillFilter) {
-            filtered = filtered.filter(m =>
-                m.user?.skills?.some(s => s.toLowerCase().includes(skillFilter.toLowerCase()))
-            );
+                if (communityData) {
+                    setParentCommunity({
+                        id: communityData.id,
+                        name: communityData.name,
+                        slug: communityData.slug,
+                        description: communityData.description || '',
+                        coverImage: communityData.cover_image,
+                        isPrivate: communityData.is_private,
+                        memberCount: communityData.member_count,
+                        tags: communityData.tags || [],
+                    });
+                }
+
+                // Sub-communities are not yet implemented in DB
+                // For now, show a placeholder
+                setSubCommunity({
+                    id: subId || '',
+                    parentCommunityId: communityData?.id || '',
+                    name: 'Sub-Community',
+                    description: 'This sub-community is a placeholder. Full sub-community support coming soon.',
+                    memberCount: 0,
+                });
+            } catch (err) {
+                console.error('Error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (slug) {
+            fetchData();
         }
-        return filtered;
-    }, [skillFilter]);
+    }, [slug, subId]);
+
+    // Filter members by skill
+    const members = MOCK_MEMBERS.filter(m => {
+        if (!skillFilter) return m.status === 'approved';
+        return m.status === 'approved' && m.user?.skills?.some(s =>
+            s.toLowerCase().includes(skillFilter.toLowerCase())
+        );
+    });
 
     if (!isAuthenticated) {
         navigate('/login');
         return null;
+    }
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mx-auto mb-4" />
+                    <p className="text-gray-600">Loading sub-community...</p>
+                </div>
+            </div>
+        );
     }
 
     if (!subCommunity) {
@@ -189,51 +246,13 @@ export const SubCommunityDashboard: React.FC = () => {
 
     // Tab Content Renderers
     const renderFeed = () => (
-        <div className="space-y-4">
-            {/* Create Post */}
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-                <div className="flex gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                        <span className="material-symbols-outlined text-emerald-600">person</span>
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Share something with the community..."
-                        className="flex-1 px-4 py-2 bg-gray-50 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <button className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-sm font-medium transition-colors">
-                        Post
-                    </button>
-                </div>
-            </div>
-
-            {/* Posts */}
-            {MOCK_POSTS.map(post => (
-                <div key={post.id} className="bg-white rounded-xl border border-gray-100 p-5">
-                    <div className="flex items-start gap-3 mb-3">
-                        <img src={post.avatar} alt={post.author} className="w-10 h-10 rounded-full object-cover" />
-                        <div>
-                            <p className="font-semibold text-gray-900">{post.author}</p>
-                            <p className="text-sm text-gray-500">{post.timestamp}</p>
-                        </div>
-                    </div>
-                    <p className="text-gray-700 mb-4">{post.content}</p>
-                    <div className="flex items-center gap-6 pt-3 border-t border-gray-100">
-                        <button className="flex items-center gap-1.5 text-gray-500 hover:text-emerald-600 transition-colors">
-                            <span className="material-symbols-outlined text-[20px]">favorite</span>
-                            <span className="text-sm">{post.likes}</span>
-                        </button>
-                        <button className="flex items-center gap-1.5 text-gray-500 hover:text-emerald-600 transition-colors">
-                            <span className="material-symbols-outlined text-[20px]">chat_bubble</span>
-                            <span className="text-sm">{post.comments}</span>
-                        </button>
-                        <button className="flex items-center gap-1.5 text-gray-500 hover:text-emerald-600 transition-colors">
-                            <span className="material-symbols-outlined text-[20px]">share</span>
-                        </button>
-                    </div>
-                </div>
-            ))}
-        </div>
+        <FeedList
+            communityId={parentCommunity?.id || ''}
+            currentUserId={user?.id}
+            currentUserAvatar={profile?.avatar_url || undefined}
+            currentUserName={profile?.full_name}
+            canPost={true}
+        />
     );
 
     const renderDirectory = () => (
@@ -266,8 +285,8 @@ export const SubCommunityDashboard: React.FC = () => {
                                 <div className="flex items-center gap-2 mb-1">
                                     <h4 className="font-semibold text-gray-900 truncate">{member.user?.fullName}</h4>
                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${member.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                                            member.role === 'moderator' ? 'bg-blue-100 text-blue-700' :
-                                                'bg-gray-100 text-gray-600'
+                                        member.role === 'moderator' ? 'bg-blue-100 text-blue-700' :
+                                            'bg-gray-100 text-gray-600'
                                         }`}>
                                         {member.role}
                                     </span>
@@ -295,8 +314,8 @@ export const SubCommunityDashboard: React.FC = () => {
                     <div className="flex items-start justify-between mb-3">
                         <h4 className="font-semibold text-gray-900">{project.name}</h4>
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                project.status === 'Planning' ? 'bg-amber-100 text-amber-700' :
-                                    'bg-emerald-100 text-emerald-700'
+                            project.status === 'Planning' ? 'bg-amber-100 text-amber-700' :
+                                'bg-emerald-100 text-emerald-700'
                             }`}>
                             {project.status}
                         </span>
@@ -356,8 +375,8 @@ export const SubCommunityDashboard: React.FC = () => {
                     {MOCK_RESOURCES.map(resource => (
                         <div key={resource.id} className="px-5 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors">
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${resource.type === 'PDF' ? 'bg-red-100' :
-                                    resource.type === 'XLSX' ? 'bg-green-100' :
-                                        'bg-purple-100'
+                                resource.type === 'XLSX' ? 'bg-green-100' :
+                                    'bg-purple-100'
                                 }`}>
                                 <span className="material-symbols-outlined text-xl ${
                   resource.type === 'PDF' ? 'text-red-600' :
@@ -407,8 +426,8 @@ export const SubCommunityDashboard: React.FC = () => {
                             <div className="flex items-center gap-2 mb-1">
                                 <h4 className="font-semibold text-gray-900">{event.name}</h4>
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${event.type === 'Virtual' ? 'bg-blue-100 text-blue-700' :
-                                        event.type === 'In-Person' ? 'bg-orange-100 text-orange-700' :
-                                            'bg-purple-100 text-purple-700'
+                                    event.type === 'In-Person' ? 'bg-orange-100 text-orange-700' :
+                                        'bg-purple-100 text-purple-700'
                                     }`}>
                                     {event.type}
                                 </span>
@@ -484,8 +503,8 @@ export const SubCommunityDashboard: React.FC = () => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === tab.id
-                                        ? 'border-emerald-500 text-emerald-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    ? 'border-emerald-500 text-emerald-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                     }`}
                             >
                                 <span className="material-symbols-outlined text-[20px]">{tab.icon}</span>

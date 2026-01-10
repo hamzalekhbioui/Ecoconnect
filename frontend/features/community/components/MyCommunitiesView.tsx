@@ -1,36 +1,126 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
-import { MOCK_COMMUNITIES, MOCK_COMMUNITY_MEMBERS } from '../data/mockCommunityData';
+import { supabase } from '../../../config/supabase';
+import { Community } from '../../../types';
+import { Loader2 } from 'lucide-react';
 
 export const MyCommunitiesView: React.FC = () => {
     const navigate = useNavigate();
-    const { isAuthenticated, profile } = useAuth();
+    const { isAuthenticated, user } = useAuth();
 
-    // Get user's communities (mock - filter by user name for demo)
-    const myCommunities = useMemo(() => {
-        if (!profile) return [];
+    const [loading, setLoading] = useState(true);
+    const [myCommunities, setMyCommunities] = useState<Community[]>([]);
+    const [pendingCommunities, setPendingCommunities] = useState<Community[]>([]);
 
-        const memberCommunityIds = MOCK_COMMUNITY_MEMBERS
-            .filter(m => m.user?.fullName === profile.full_name && m.status === 'approved')
-            .map(m => m.communityId);
+    // Fetch user's communities from Supabase
+    useEffect(() => {
+        const fetchMyCommunities = async () => {
+            if (!user?.id) {
+                setLoading(false);
+                return;
+            }
 
-        return MOCK_COMMUNITIES.filter(c => memberCommunityIds.includes(c.id));
-    }, [profile]);
+            try {
+                setLoading(true);
 
-    const pendingCommunities = useMemo(() => {
-        if (!profile) return [];
+                // Fetch approved memberships
+                const { data: approvedMemberships, error: approvedError } = await supabase
+                    .from('community_members')
+                    .select(`
+                        community_id,
+                        communities (
+                            id,
+                            name,
+                            slug,
+                            description,
+                            cover_image,
+                            is_private,
+                            member_count,
+                            tags
+                        )
+                    `)
+                    .eq('user_id', user.id)
+                    .eq('status', 'approved');
 
-        const pendingCommunityIds = MOCK_COMMUNITY_MEMBERS
-            .filter(m => m.user?.fullName === profile.full_name && m.status === 'pending')
-            .map(m => m.communityId);
+                if (approvedError) {
+                    console.error('Error fetching approved communities:', approvedError);
+                } else {
+                    const approved = (approvedMemberships || [])
+                        .filter((m: any) => m.communities)
+                        .map((m: any) => ({
+                            id: m.communities.id,
+                            name: m.communities.name,
+                            slug: m.communities.slug,
+                            description: m.communities.description || '',
+                            coverImage: m.communities.cover_image,
+                            isPrivate: m.communities.is_private,
+                            memberCount: m.communities.member_count,
+                            tags: m.communities.tags || [],
+                        }));
+                    setMyCommunities(approved);
+                }
 
-        return MOCK_COMMUNITIES.filter(c => pendingCommunityIds.includes(c.id));
-    }, [profile]);
+                // Fetch pending memberships
+                const { data: pendingMemberships, error: pendingError } = await supabase
+                    .from('community_members')
+                    .select(`
+                        community_id,
+                        communities (
+                            id,
+                            name,
+                            slug,
+                            description,
+                            cover_image,
+                            is_private,
+                            member_count,
+                            tags
+                        )
+                    `)
+                    .eq('user_id', user.id)
+                    .eq('status', 'pending');
+
+                if (pendingError) {
+                    console.error('Error fetching pending communities:', pendingError);
+                } else {
+                    const pending = (pendingMemberships || [])
+                        .filter((m: any) => m.communities)
+                        .map((m: any) => ({
+                            id: m.communities.id,
+                            name: m.communities.name,
+                            slug: m.communities.slug,
+                            description: m.communities.description || '',
+                            coverImage: m.communities.cover_image,
+                            isPrivate: m.communities.is_private,
+                            memberCount: m.communities.member_count,
+                            tags: m.communities.tags || [],
+                        }));
+                    setPendingCommunities(pending);
+                }
+            } catch (err) {
+                console.error('Error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchMyCommunities();
+    }, [user?.id]);
 
     if (!isAuthenticated) {
         navigate('/login');
         return null;
+    }
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mx-auto mb-4" />
+                    <p className="text-gray-600">Loading your communities...</p>
+                </div>
+            </div>
+        );
     }
 
     return (

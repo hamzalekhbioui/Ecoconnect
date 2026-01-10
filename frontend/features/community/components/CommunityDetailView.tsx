@@ -1,39 +1,173 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { RequestJoinModal } from './RequestJoinModal';
-import { MOCK_COMMUNITIES, MOCK_SUB_COMMUNITIES, MOCK_COMMUNITY_MEMBERS } from '../data/mockCommunityData';
-import { SubCommunity } from '../../../types';
+import { CommunityMembersList } from './CommunityMembersList';
+import { CommunityEventsList } from './CommunityEventsList';
+import { supabase } from '../../../config/supabase';
+import { Community, SubCommunity, CommunityMember } from '../../../types';
+import { Loader2, Users } from 'lucide-react';
 
 export const CommunityDetailView: React.FC = () => {
     const { slug } = useParams<{ slug: string }>();
     const navigate = useNavigate();
-    const { isAuthenticated, profile } = useAuth();
+    const { isAuthenticated, profile, user } = useAuth();
 
     const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [community, setCommunity] = useState<Community | null>(null);
+    const [communityAdminId, setCommunityAdminId] = useState<string | null>(null);
+    const [subCommunities, setSubCommunities] = useState<SubCommunity[]>([]);
+    const [membership, setMembership] = useState<CommunityMember | null>(null);
 
-    // Find community by slug
-    const community = useMemo(() =>
-        MOCK_COMMUNITIES.find(c => c.slug === slug),
-        [slug]
-    );
+    // Fetch community data from Supabase
+    useEffect(() => {
+        const fetchCommunityData = async () => {
+            try {
+                setLoading(true);
 
-    // Get sub-communities for this parent
-    const subCommunities = useMemo(() =>
-        MOCK_SUB_COMMUNITIES.filter(sc => sc.parentCommunityId === community?.id),
-        [community]
-    );
+                // Fetch community by slug
+                const { data: communityData, error: communityError } = await supabase
+                    .from('communities')
+                    .select('*')
+                    .eq('slug', slug)
+                    .single();
 
-    // Check if current user is a member
-    const membership = useMemo(() => {
-        if (!isAuthenticated || !profile || !community) return null;
-        return MOCK_COMMUNITY_MEMBERS.find(
-            m => m.communityId === community.id && m.user?.fullName === profile.full_name
-        );
-    }, [isAuthenticated, profile, community]);
+                if (communityError) {
+                    console.error('Error fetching community:', communityError);
+                    setCommunity(null);
+                    return;
+                }
+
+                // Transform to match Community type
+                const transformedCommunity: Community = {
+                    id: communityData.id,
+                    name: communityData.name,
+                    slug: communityData.slug,
+                    description: communityData.description || '',
+                    mission: communityData.mission,
+                    coverImage: communityData.cover_image,
+                    isPrivate: communityData.is_private,
+                    memberCount: communityData.member_count,
+                    tags: communityData.tags || [],
+                };
+                setCommunity(transformedCommunity);
+                setCommunityAdminId(communityData.created_by || null);
+
+                // Fetch sub-communities for this parent (if sub_communities table exists)
+                // For now, sub-communities are not implemented in the database
+                setSubCommunities([]);
+
+                // Check if current user is a member
+                if (user?.id && communityData.id) {
+                    const { data: membershipData } = await supabase
+                        .from('community_members')
+                        .select('*')
+                        .eq('community_id', communityData.id)
+                        .eq('user_id', user.id)
+                        .single();
+
+                    if (membershipData) {
+                        setMembership({
+                            id: membershipData.id,
+                            userId: membershipData.user_id,
+                            communityId: membershipData.community_id,
+                            role: membershipData.role,
+                            status: membershipData.status,
+                            joinedAt: membershipData.joined_at,
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('Error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (slug) {
+            fetchCommunityData();
+        }
+    }, [slug, user?.id]);
 
     const isMember = membership?.status === 'approved';
     const isPending = membership?.status === 'pending';
+
+    // Handle join request
+    const handleJoinRequest = async (message: string) => {
+        if (!user?.id || !community?.id) return;
+
+        try {
+            // Insert join request with pending status for private communities
+            const { error } = await supabase
+                .from('community_members')
+                .insert({
+                    user_id: user.id,
+                    community_id: community.id,
+                    role: 'member',
+                    status: 'pending', // All communities now require approval
+                });
+
+            if (error) {
+                console.error('Error joining community:', error);
+                return;
+            }
+
+            // If private community, create notification for community admin
+            if (community.isPrivate && communityAdminId) {
+                const userName = profile?.full_name || 'A user';
+                await supabase
+                    .from('notifications')
+                    .insert({
+                        user_id: communityAdminId,
+                        type: 'join_request',
+                        title: 'New Join Request',
+                        message: `${userName} wants to join ${community.name}`,
+                        data: {
+                            community_id: community.id,
+                            community_name: community.name,
+                            requester_id: user.id,
+                            requester_name: userName,
+                            request_message: message,
+                        },
+                    });
+            }
+
+            // Refresh membership status
+            const { data: membershipData } = await supabase
+                .from('community_members')
+                .select('*')
+                .eq('community_id', community.id)
+                .eq('user_id', user.id)
+                .single();
+
+            if (membershipData) {
+                setMembership({
+                    id: membershipData.id,
+                    userId: membershipData.user_id,
+                    communityId: membershipData.community_id,
+                    role: membershipData.role,
+                    status: membershipData.status,
+                    joinedAt: membershipData.joined_at,
+                });
+            }
+
+            setIsJoinModalOpen(false);
+        } catch (err) {
+            console.error('Error:', err);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mx-auto mb-4" />
+                    <p className="text-gray-600">Loading community...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (!community) {
         return (
@@ -57,8 +191,8 @@ export const CommunityDetailView: React.FC = () => {
         <div
             onClick={() => isMember && navigate(`/communities/${slug}/sub/${subCommunity.id}`)}
             className={`bg-white rounded-xl border border-gray-100 overflow-hidden transition-all ${isMember
-                    ? 'hover:shadow-lg cursor-pointer transform hover:-translate-y-1'
-                    : 'opacity-75'
+                ? 'hover:shadow-lg cursor-pointer transform hover:-translate-y-1'
+                : 'opacity-75'
                 }`}
         >
             {/* Image */}
@@ -184,9 +318,9 @@ export const CommunityDetailView: React.FC = () => {
                                     className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-full transition-colors"
                                 >
                                     <span className="material-symbols-outlined text-[20px]">
-                                        {community.isPrivate ? 'lock' : 'add'}
+                                        {community.isPrivate ? 'lock' : 'person_add'}
                                     </span>
-                                    {community.isPrivate ? 'Request to Join' : 'Join Community'}
+                                    Request to Join
                                 </button>
                             )}
                         </div>
@@ -219,20 +353,20 @@ export const CommunityDetailView: React.FC = () => {
                             </div>
 
                             {/* Member Preview */}
-                            {isMember && (
+                            {isMember && membership && (
                                 <div className="mt-6 pt-6 border-t border-gray-100">
                                     <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Your Role</h3>
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
                                             <span className="material-symbols-outlined text-emerald-600">
-                                                {membership?.role === 'admin' ? 'shield_person' :
-                                                    membership?.role === 'moderator' ? 'verified_user' : 'person'}
+                                                {membership.role === 'admin' ? 'shield_person' :
+                                                    membership.role === 'moderator' ? 'verified_user' : 'person'}
                                             </span>
                                         </div>
                                         <div>
-                                            <p className="font-semibold text-gray-900 capitalize">{membership?.role}</p>
+                                            <p className="font-semibold text-gray-900 capitalize">{membership.role}</p>
                                             <p className="text-sm text-gray-500">
-                                                Joined {new Date(membership?.joinedAt || '').toLocaleDateString()}
+                                                Joined {new Date(membership.joinedAt).toLocaleDateString()}
                                             </p>
                                         </div>
                                     </div>
@@ -266,6 +400,33 @@ export const CommunityDetailView: React.FC = () => {
                                 <p className="text-gray-500">This community hasn't created any sub-communities yet.</p>
                             </div>
                         )}
+
+                        {/* Community Events */}
+                        {(isMember || (user?.id && communityAdminId === user.id)) && (
+                            <div className="mt-10">
+                                <CommunityEventsList
+                                    communityId={community.id}
+                                    isCreator={user?.id === communityAdminId}
+                                    creatorId={communityAdminId || ''}
+                                />
+                            </div>
+                        )}
+
+                        {/* Members Directory */}
+                        <div className="mt-10">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                    <Users className="w-5 h-5 text-emerald-500" />
+                                    Members Directory
+                                </h2>
+                                <span className="text-sm text-gray-500">{community.memberCount} members</span>
+                            </div>
+                            <CommunityMembersList
+                                communityId={community.id}
+                                creatorId={communityAdminId}
+                                isMember={isMember}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -275,10 +436,7 @@ export const CommunityDetailView: React.FC = () => {
                 isOpen={isJoinModalOpen}
                 onClose={() => setIsJoinModalOpen(false)}
                 community={community}
-                onSubmit={(message) => {
-                    console.log('Join request submitted:', message);
-                    // Here you would make a Supabase call to insert into community_members
-                }}
+                onSubmit={handleJoinRequest}
             />
         </div>
     );

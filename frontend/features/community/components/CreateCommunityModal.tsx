@@ -58,7 +58,7 @@ export const CreateCommunityModal: React.FC<CreateCommunityModalProps> = ({
                 .map(t => t.trim())
                 .filter(t => t.length > 0);
 
-            const { error: insertError } = await supabase
+            const { data: communityData, error: insertError } = await supabase
                 .from('communities')
                 .insert({
                     name: name.trim(),
@@ -68,13 +68,32 @@ export const CreateCommunityModal: React.FC<CreateCommunityModalProps> = ({
                     is_private: isPrivate,
                     tags: tagsArray,
                     member_count: 1, // Creator is first member
-                });
+                    created_by: user.id, // Track who created the community
+                })
+                .select('id')
+                .single();
 
             if (insertError) {
                 if (insertError.code === '23505') {
                     throw new Error('A community with this name already exists');
                 }
                 throw new Error(insertError.message);
+            }
+
+            // Add creator as admin member of the community
+            if (communityData?.id) {
+                const { error: memberError } = await supabase
+                    .from('community_members')
+                    .insert({
+                        user_id: user.id,
+                        community_id: communityData.id,
+                        role: 'admin',
+                        status: 'approved',
+                    });
+
+                if (memberError) {
+                    console.error('Error adding creator as member:', memberError);
+                }
             }
 
             // Reset form

@@ -7,7 +7,9 @@ import {
     ChevronLeft,
     ChevronRight,
     LogOut,
-    ShoppingBag
+    ShoppingBag,
+    Building2,
+    Flag
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -21,8 +23,10 @@ interface AdminSidebarProps {
 const navItems = [
     { id: 'admin-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'admin-users', label: 'Users', icon: Users },
+    { id: 'admin-communities', label: 'Communities', icon: Building2 },
     { id: 'admin-resources', label: 'Resources', icon: Package },
     { id: 'admin-marketplace', label: 'Marketplace', icon: ShoppingBag },
+    { id: 'admin-reports', label: 'Reports', icon: Flag },
     { id: 'admin-events', label: 'Events', icon: Calendar },
 ];
 

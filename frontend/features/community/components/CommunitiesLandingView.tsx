@@ -3,11 +3,44 @@ import { useNavigate } from 'react-router-dom';
 import { CommunityCard } from './CommunityCard';
 import { CreateCommunityModal } from './CreateCommunityModal';
 import { filterCommunities } from '../utils/communityFilters';
-import { FILTER_OPTIONS } from '../data/mockCommunityData';
 import { CommunityFilters, Community } from '../../../types';
 import { supabase } from '../../../config/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 import { Loader2, Plus } from 'lucide-react';
+
+// Filter options for sidebar dropdowns (static UI data)
+const FILTER_OPTIONS = {
+    theme: [
+        'Sustainability',
+        'Innovation',
+        'Community',
+        'Education',
+        'Technology',
+    ],
+    sector: [
+        'Tourism',
+        'Agriculture',
+        'Technology',
+        'Energy',
+        'Finance',
+        'Food',
+    ],
+    projectType: [
+        'Research',
+        'Implementation',
+        'Advocacy',
+        'Education',
+        'Networking',
+    ],
+    territory: [
+        'Global',
+        'Europe',
+        'North America',
+        'Asia Pacific',
+        'Africa',
+        'Latin America',
+    ],
+};
 
 export const CommunitiesLandingView: React.FC = () => {
     const navigate = useNavigate();

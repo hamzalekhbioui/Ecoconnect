@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogOut, User, X, Menu } from 'lucide-react';
+import { LogOut, User, X, Menu, MessageCircle } from 'lucide-react';
 
 interface NavbarProps {
   isAuthenticated: boolean;
@@ -44,8 +44,8 @@ export const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, onLogin, onLogo
                 key={item.key}
                 onClick={() => onNavigate(item.key)}
                 className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${currentPage === item.key
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 {item.label}
@@ -55,8 +55,8 @@ export const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, onLogin, onLogo
               <button
                 onClick={() => onNavigate('dashboard')}
                 className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${currentPage === 'dashboard'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 Dashboard
@@ -94,6 +94,16 @@ export const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, onLogin, onLogo
                       >
                         <User className="w-4 h-4" />
                         Dashboard
+                      </button>
+                      <button
+                        onClick={() => {
+                          onNavigate('messaging');
+                          setShowDropdown(false);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        Messages
                       </button>
                       <hr className="my-1 border-gray-100" />
                       <button
@@ -156,8 +166,8 @@ export const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, onLogin, onLogo
                   key={item.key}
                   onClick={() => handleNavClick(item.key)}
                   className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${currentPage === item.key
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'text-gray-700 hover:bg-gray-50'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'text-gray-700 hover:bg-gray-50'
                     }`}
                 >
                   {item.label}
@@ -167,8 +177,8 @@ export const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, onLogin, onLogo
                 <button
                   onClick={() => handleNavClick('dashboard')}
                   className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${currentPage === 'dashboard'
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'text-gray-700 hover:bg-gray-50'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'text-gray-700 hover:bg-gray-50'
                     }`}
                 >
                   Dashboard

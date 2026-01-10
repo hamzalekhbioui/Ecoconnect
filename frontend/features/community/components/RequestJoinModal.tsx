@@ -49,7 +49,7 @@ export const RequestJoinModal: React.FC<RequestJoinModalProps> = ({
                     user_id: user.id,
                     community_id: community.id,
                     role: 'member',
-                    status: community.isPrivate ? 'pending' : 'approved',
+                    status: 'pending', // All communities now require approval
                 });
 
             if (insertError) {

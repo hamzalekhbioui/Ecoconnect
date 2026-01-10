@@ -1,4 +1,6 @@
-const API_BASE_URL = 'http://localhost:3001';
+// Use relative path so requests go through Vite proxy
+// This enables the app to work via Ngrok or any other forwarding URL
+const API_BASE_URL = '/api';
 
 export interface ChatResponse {
     response: string;
