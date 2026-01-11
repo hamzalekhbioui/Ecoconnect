@@ -4,6 +4,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { RequestJoinModal } from './RequestJoinModal';
 import { CommunityMembersList } from './CommunityMembersList';
 import { CommunityEventsList } from './CommunityEventsList';
+import { FeedList } from './FeedList';
 import { supabase } from '../../../config/supabase';
 import { Community, SubCommunity, CommunityMember } from '../../../types';
 import { Loader2, Users } from 'lucide-react';
@@ -375,8 +376,25 @@ export const CommunityDetailView: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Right Column - Sub-Communities */}
+                    {/* Right Column - Feed, Sub-Communities, Events, Members */}
                     <div className="lg:col-span-2">
+                        {/* Community Feed - Only for approved members */}
+                        {isMember && (
+                            <div className="mb-10">
+                                <div className="flex items-center gap-2 mb-6">
+                                    <span className="material-symbols-outlined text-emerald-500">forum</span>
+                                    <h2 className="text-xl font-bold text-gray-900">Community Feed</h2>
+                                </div>
+                                <FeedList
+                                    communityId={community.id}
+                                    currentUserId={user?.id}
+                                    currentUserAvatar={profile?.avatar_url || undefined}
+                                    currentUserName={profile?.full_name}
+                                    canPost={true}
+                                />
+                            </div>
+                        )}
+
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-xl font-bold text-gray-900">Sub-Communities</h2>
                             {!isMember && (

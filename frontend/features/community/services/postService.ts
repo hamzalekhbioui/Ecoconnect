@@ -1,28 +1,44 @@
 import { supabase } from '../../../config/supabase';
 import { Post, PostRow, PostComment, PostCommentRow } from '../../../types';
 
+// Extended row type with aggregated counts
+interface PostRowWithCounts extends PostRow {
+    post_likes: { count: number }[];
+    post_comments: { count: number }[];
+}
+
 /**
  * Transform database row to frontend type
  */
-const transformPostRow = (row: PostRow, currentUserId?: string, likedPostIds?: Set<string>): Post => ({
-    id: row.id,
-    content: row.content,
-    mediaUrl: row.media_url,
-    mediaType: row.media_type,
-    authorId: row.author_id,
-    communityId: row.community_id,
-    likeCount: row.like_count,
-    commentCount: row.comment_count,
-    createdAt: row.created_at,
-    author: row.profiles ? {
-        id: row.profiles.id,
-        fullName: row.profiles.full_name,
-        avatarUrl: row.profiles.avatar_url,
-    } : undefined,
-    isLiked: likedPostIds ? likedPostIds.has(row.id) : false,
-});
+const transformPostRow = (
+    row: PostRowWithCounts,
+    currentUserId?: string,
+    likedPostIds?: Set<string>
+): Post => {
+    // Extract counts from aggregated data (Supabase returns array with count object)
+    const likeCount = row.post_likes?.[0]?.count ?? row.like_count ?? 0;
+    const commentCount = row.post_comments?.[0]?.count ?? row.comment_count ?? 0;
 
-const transformCommentRow = (row: PostCommentRow): PostComment => ({    
+    return {
+        id: row.id,
+        content: row.content,
+        mediaUrl: row.media_url,
+        mediaType: row.media_type,
+        authorId: row.author_id,
+        communityId: row.community_id,
+        likeCount,
+        commentCount,
+        createdAt: row.created_at,
+        author: row.profiles ? {
+            id: row.profiles.id,
+            fullName: row.profiles.full_name,
+            avatarUrl: row.profiles.avatar_url,
+        } : undefined,
+        isLiked: likedPostIds ? likedPostIds.has(row.id) : false,
+    };
+};
+
+const transformCommentRow = (row: PostCommentRow): PostComment => ({
     id: row.id,
     postId: row.post_id,
     authorId: row.author_id,
@@ -37,6 +53,7 @@ const transformCommentRow = (row: PostCommentRow): PostComment => ({
 
 /**
  * Fetch posts for a specific community (paginated, newest first)
+ * Uses COUNT aggregation on post_likes and post_comments for accurate counts
  */
 export const fetchCommunityPosts = async (
     communityId: string,
@@ -48,7 +65,9 @@ export const fetchCommunityPosts = async (
         .from('posts')
         .select(`
             *,
-            profiles:author_id(id, full_name, avatar_url)
+            profiles:author_id(id, full_name, avatar_url),
+            post_likes(count),
+            post_comments(count)
         `)
         .eq('community_id', communityId)
         .order('created_at', { ascending: false })
@@ -74,7 +93,7 @@ export const fetchCommunityPosts = async (
         }
     }
 
-    return (data as PostRow[]).map(row => transformPostRow(row, currentUserId, likedPostIds));
+    return (data as PostRowWithCounts[]).map(row => transformPostRow(row, currentUserId, likedPostIds));
 };
 
 /**
@@ -137,7 +156,13 @@ export const createPost = async (
         throw error;
     }
 
-    return transformPostRow(data as PostRow, authorId, new Set());
+    // For newly created posts, likes and comments are 0
+    const postWithCounts: PostRowWithCounts = {
+        ...(data as PostRow),
+        post_likes: [{ count: 0 }],
+        post_comments: [{ count: 0 }],
+    };
+    return transformPostRow(postWithCounts, authorId, new Set());
 };
 
 /**

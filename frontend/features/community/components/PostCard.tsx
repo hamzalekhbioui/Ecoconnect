@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Post } from '../../../types';
 import { formatDistanceToNow } from 'date-fns';
+import { supabase } from '../../../config/supabase';
 
 interface PostCardProps {
     post: Post;
@@ -24,16 +25,77 @@ export const PostCard: React.FC<PostCardProps> = ({
 
     const isAuthor = currentUserId === post.authorId;
 
+    // Sync local state with prop changes (when posts are refreshed)
+    useEffect(() => {
+        setLikeCount(post.likeCount);
+        setIsLiked(post.isLiked || false);
+    }, [post.likeCount, post.isLiked]);
+
+    // Realtime subscription for like count updates
+    useEffect(() => {
+        // Subscribe to post_likes changes for this specific post
+        const channel = supabase
+            .channel(`post-likes-${post.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'post_likes',
+                    filter: `post_id=eq.${post.id}`,
+                },
+                (payload) => {
+                    console.log('[PostCard] Like added:', payload);
+                    setLikeCount(prev => prev + 1);
+                    // If current user liked, update isLiked
+                    if (payload.new && (payload.new as { user_id: string }).user_id === currentUserId) {
+                        setIsLiked(true);
+                    }
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'post_likes',
+                    filter: `post_id=eq.${post.id}`,
+                },
+                (payload) => {
+                    console.log('[PostCard] Like removed:', payload);
+                    setLikeCount(prev => Math.max(0, prev - 1));
+                    // If current user unliked, update isLiked
+                    if (payload.old && (payload.old as { user_id: string }).user_id === currentUserId) {
+                        setIsLiked(false);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [post.id, currentUserId]);
+
     const handleLike = async () => {
         if (!onLike || isLiking) return;
 
+        // Store previous state for rollback
+        const wasLiked = isLiked;
+        const previousCount = likeCount;
+
+        // Optimistic update
+        setIsLiked(!wasLiked);
+        setLikeCount(wasLiked ? previousCount - 1 : previousCount + 1);
         setIsLiking(true);
+
         try {
             await onLike(post.id);
-            setIsLiked(!isLiked);
-            setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
         } catch (error) {
-            console.error('Error toggling like:', error);
+            // Rollback on error
+            console.error('[PostCard] Error toggling like:', error);
+            setIsLiked(wasLiked);
+            setLikeCount(previousCount);
         } finally {
             setIsLiking(false);
         }
@@ -133,8 +195,8 @@ export const PostCard: React.FC<PostCardProps> = ({
                     onClick={handleLike}
                     disabled={isLiking}
                     className={`flex items-center gap-1.5 transition-colors ${isLiked
-                            ? 'text-red-500'
-                            : 'text-gray-500 hover:text-red-500'
+                        ? 'text-red-500'
+                        : 'text-gray-500 hover:text-red-500'
                         } disabled:opacity-50`}
                 >
                     <span className={`material-symbols-outlined text-[20px] ${isLiked ? 'fill' : ''}`}>
@@ -152,10 +214,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <span className="text-sm font-medium">{post.commentCount}</span>
                 </button>
 
-                {/* Share Button */}
-                <button className="flex items-center gap-1.5 text-gray-500 hover:text-emerald-600 transition-colors ml-auto">
-                    <span className="material-symbols-outlined text-[20px]">share</span>
-                </button>
+
             </div>
         </div>
     );
