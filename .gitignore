@@ -4,10 +4,14 @@
 .env.*.local
 
 # Database Files
-
+database/
+*.sql
 *.sqlite
 *.sqlite3
 *.db
+*.dump
+*.bak
+*.backup
 
 # Dependencies
 node_modules/
