@@ -88,6 +88,7 @@ interface MembershipRequest {
   community_name: string;
 }
 
+
 // Role Badge Component
 const RoleBadge: React.FC<{ role: 'member' | 'visitor' | 'admin' }> = ({ role }) => {
   if (role === 'member') {
@@ -513,10 +514,7 @@ export const DashboardView: React.FC = () => {
         throw ownedError;
       }
 
-      console.log('Owned communities for user', user.id, ':', ownedCommunities);
-
       if (!ownedCommunities || ownedCommunities.length === 0) {
-        console.log('No owned communities - skipping membership request fetch');
         setMembershipRequests([]);
         setRequestsLoading(false);
         return;
@@ -524,8 +522,6 @@ export const DashboardView: React.FC = () => {
 
       const communityIds = ownedCommunities.map(c => c.id);
       const communityNameMap = new Map(ownedCommunities.map(c => [c.id, c.name]));
-
-      console.log('Fetching pending members for community IDs:', communityIds);
 
       // Step 2: Fetch pending membership requests for those communities
       const { data: pendingMembers, error: membersError } = await supabase
@@ -539,8 +535,6 @@ export const DashboardView: React.FC = () => {
         console.error('Error fetching pending members:', membersError);
         throw membersError;
       }
-
-      console.log('Pending members found:', pendingMembers);
 
       if (!pendingMembers || pendingMembers.length === 0) {
         setMembershipRequests([]);
@@ -573,7 +567,6 @@ export const DashboardView: React.FC = () => {
         community_name: communityNameMap.get(m.community_id) || 'Unknown Community',
       }));
 
-      console.log('Final membership requests:', requests);
       setMembershipRequests(requests);
     } catch (err) {
       console.error('Error fetching membership requests:', err);
@@ -583,7 +576,7 @@ export const DashboardView: React.FC = () => {
     }
   }, [user]);
 
-  // Fetch membership requests when user is loaded (independent of communities fetch)
+  // Fetch membership requests when user is loaded
   useEffect(() => {
     fetchMembershipRequests();
   }, [fetchMembershipRequests]);

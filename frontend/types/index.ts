@@ -185,6 +185,7 @@ export interface Message {
 // =============================================================================
 
 export type PostMediaType = 'image';
+export type PostStatus = 'pending' | 'published' | 'rejected';
 
 export interface Post {
   id: string;
@@ -193,6 +194,7 @@ export interface Post {
   mediaType?: PostMediaType;
   authorId: string;
   communityId: string;
+  status: PostStatus;
   likeCount: number;
   commentCount: number;
   createdAt: string;
@@ -214,6 +216,7 @@ export interface PostRow {
   media_type?: PostMediaType;
   author_id: string;
   community_id: string;
+  status: PostStatus;
   like_count: number;
   comment_count: number;
   created_at: string;
@@ -235,22 +238,29 @@ export interface PostComment {
   id: string;
   postId: string;
   authorId: string;
+  parentId?: string | null;
   content: string;
   createdAt: string;
+  likeCount: number;
+  isLiked?: boolean;
   // Joined from profiles table
   author?: {
     id: string;
     fullName: string;
     avatarUrl?: string;
   };
+  // For nested rendering
+  replies?: PostComment[];
 }
 
 export interface PostCommentRow {
   id: string;
   post_id: string;
   author_id: string;
+  parent_id?: string | null;
   content: string;
   created_at: string;
+  like_count?: number;
   profiles?: {
     id: string;
     full_name: string;

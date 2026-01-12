@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { X, Upload, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useCallback } from 'react';
+import { X, Loader2, ImageIcon, Trash2 } from 'lucide-react';
 import { supabase } from '../../../config/supabase';
 import { useAuth } from '../../../hooks/useAuth';
+import { uploadCommunityCover } from '../services/communityStorageService';
 
 interface CreateCommunityModalProps {
     isOpen: boolean;
@@ -17,25 +18,97 @@ export const CreateCommunityModal: React.FC<CreateCommunityModalProps> = ({
     const { user } = useAuth();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [coverImage, setCoverImage] = useState('');
     const [isPrivate, setIsPrivate] = useState(false);
     const [tags, setTags] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    if (!isOpen) return null;
+    // File upload state
+    const [coverFile, setCoverFile] = useState<File | null>(null);
+    const [coverPreview, setCoverPreview] = useState<string | null>(null);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Generate slug from name
-    const generateSlug = (text: string) => {
+    const generateSlug = useCallback((text: string) => {
         return text
             .toLowerCase()
             .replace(/[^a-z0-9\s-]/g, '')
             .replace(/\s+/g, '-')
             .replace(/-+/g, '-')
             .trim();
-    };
+    }, []);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    // Handle file selection
+    const handleFileSelect = useCallback((file: File) => {
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            setError('Please select an image file (JPG, PNG, GIF, etc.)');
+            return;
+        }
+
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            setError('Image size must be less than 5MB');
+            return;
+        }
+
+        setError(null);
+        setCoverFile(file);
+
+        // Create preview URL
+        const previewUrl = URL.createObjectURL(file);
+        setCoverPreview(previewUrl);
+    }, []);
+
+    // Handle file input change
+    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleFileSelect(file);
+        }
+    }, [handleFileSelect]);
+
+    // Handle drag events
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(true);
+    }, []);
+
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+    }, []);
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            handleFileSelect(file);
+        }
+    }, [handleFileSelect]);
+
+    // Remove selected file
+    const handleRemoveFile = useCallback(() => {
+        if (coverPreview) {
+            URL.revokeObjectURL(coverPreview);
+        }
+        setCoverFile(null);
+        setCoverPreview(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    }, [coverPreview]);
+
+    // Click to open file picker
+    const handleZoneClick = useCallback(() => {
+        fileInputRef.current?.click();
+    }, []);
+
+    const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
@@ -52,6 +125,13 @@ export const CreateCommunityModal: React.FC<CreateCommunityModalProps> = ({
         setIsSubmitting(true);
 
         try {
+            let coverImageUrl: string | null = null;
+
+            // Upload cover image if selected
+            if (coverFile) {
+                coverImageUrl = await uploadCommunityCover(coverFile, user.id);
+            }
+
             const slug = generateSlug(name);
             const tagsArray = tags
                 .split(',')
@@ -64,11 +144,11 @@ export const CreateCommunityModal: React.FC<CreateCommunityModalProps> = ({
                     name: name.trim(),
                     slug,
                     description: description.trim() || null,
-                    cover_image: coverImage.trim() || null,
+                    cover_image: coverImageUrl,
                     is_private: isPrivate,
                     tags: tagsArray,
-                    member_count: 1, // Creator is first member
-                    created_by: user.id, // Track who created the community
+                    member_count: 1,
+                    created_by: user.id,
                 })
                 .select('id')
                 .single();
@@ -96,10 +176,16 @@ export const CreateCommunityModal: React.FC<CreateCommunityModalProps> = ({
                 }
             }
 
+            // Clean up preview URL
+            if (coverPreview) {
+                URL.revokeObjectURL(coverPreview);
+            }
+
             // Reset form
             setName('');
             setDescription('');
-            setCoverImage('');
+            setCoverFile(null);
+            setCoverPreview(null);
             setIsPrivate(false);
             setTags('');
 
@@ -112,7 +198,10 @@ export const CreateCommunityModal: React.FC<CreateCommunityModalProps> = ({
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [name, user, coverFile, generateSlug, tags, description, isPrivate, coverPreview, onSuccess, onClose]);
+
+    // Early return AFTER all hooks are declared
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -174,24 +263,77 @@ export const CreateCommunityModal: React.FC<CreateCommunityModalProps> = ({
                         />
                     </div>
 
-                    {/* Cover Image URL */}
+                    {/* Cover Image Upload */}
                     <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Cover Image URL
+                            Cover Image
                         </label>
-                        <div className="relative">
-                            <Upload className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                            <input
-                                type="url"
-                                value={coverImage}
-                                onChange={(e) => setCoverImage(e.target.value)}
-                                placeholder="https://example.com/image.jpg"
-                                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            />
-                        </div>
-                        <p className="mt-1 text-xs text-gray-500">
-                            Paste a URL to an image (Unsplash, Imgur, etc.)
-                        </p>
+
+                        {/* Hidden file input */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleInputChange}
+                            className="hidden"
+                        />
+
+                        {coverPreview ? (
+                            /* Preview with remove button */
+                            <div className="relative rounded-xl overflow-hidden border border-gray-200">
+                                <img
+                                    src={coverPreview}
+                                    alt="Cover preview"
+                                    className="w-full h-40 object-cover"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveFile}
+                                    className="absolute top-2 right-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-colors"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                                <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 text-white text-xs rounded">
+                                    {coverFile?.name}
+                                </div>
+                            </div>
+                        ) : (
+                            /* Drag and drop zone */
+                            <div
+                                onClick={handleZoneClick}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                                className={`
+                                    relative border-2 border-dashed rounded-xl p-8 cursor-pointer
+                                    transition-all duration-200 text-center
+                                    ${isDragOver
+                                        ? 'border-emerald-500 bg-emerald-50'
+                                        : 'border-gray-300 hover:border-emerald-400 hover:bg-gray-50'
+                                    }
+                                `}
+                            >
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className={`
+                                        p-3 rounded-full transition-colors
+                                        ${isDragOver ? 'bg-emerald-100' : 'bg-gray-100'}
+                                    `}>
+                                        <ImageIcon className={`
+                                            w-6 h-6
+                                            ${isDragOver ? 'text-emerald-600' : 'text-gray-400'}
+                                        `} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-700">
+                                            {isDragOver ? 'Drop image here' : 'Click to upload or drag and drop'}
+                                        </p>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            PNG, JPG, GIF up to 5MB
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Tags */}

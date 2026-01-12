@@ -147,11 +147,6 @@ export const FeedList: React.FC<FeedListProps> = ({
         }
     };
 
-    const handleComment = (postId: string) => {
-        // TODO: Open comment modal/section
-        console.log('Open comments for post:', postId);
-    };
-
     const handleLoginRedirect = () => {
         navigate('/login');
     };
@@ -221,9 +216,10 @@ export const FeedList: React.FC<FeedListProps> = ({
                         key={post.id}
                         post={post}
                         onLike={handleLike}
-                        onComment={handleComment}
                         onDelete={handleDelete}
                         currentUserId={currentUserId}
+                        currentUserAvatar={currentUserAvatar}
+                        currentUserName={currentUserName}
                     />
                 ))
             )}

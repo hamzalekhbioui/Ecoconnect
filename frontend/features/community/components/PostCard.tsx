@@ -2,21 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { Post } from '../../../types';
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '../../../config/supabase';
+import { CommentSection } from './CommentSection';
 
 interface PostCardProps {
     post: Post;
     onLike?: (postId: string) => Promise<void>;
-    onComment?: (postId: string) => void;
     onDelete?: (postId: string) => Promise<void>;
     currentUserId?: string;
+    currentUserAvatar?: string;
+    currentUserName?: string;
 }
 
 export const PostCard: React.FC<PostCardProps> = ({
     post,
     onLike,
-    onComment,
     onDelete,
     currentUserId,
+    currentUserAvatar,
+    currentUserName,
 }) => {
     const [isLiked, setIsLiked] = useState(post.isLiked || false);
     const [likeCount, setLikeCount] = useState(post.likeCount);
@@ -205,17 +208,21 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <span className="text-sm font-medium">{likeCount}</span>
                 </button>
 
-                {/* Comment Button */}
-                <button
-                    onClick={() => onComment?.(post.id)}
-                    className="flex items-center gap-1.5 text-gray-500 hover:text-emerald-600 transition-colors"
-                >
+                {/* Comment Count Display */}
+                <div className="flex items-center gap-1.5 text-gray-500">
                     <span className="material-symbols-outlined text-[20px]">chat_bubble_outline</span>
                     <span className="text-sm font-medium">{post.commentCount}</span>
-                </button>
-
-
+                </div>
             </div>
+
+            {/* Comment Section */}
+            <CommentSection
+                postId={post.id}
+                commentCount={post.commentCount}
+                currentUserId={currentUserId}
+                currentUserAvatar={currentUserAvatar}
+                currentUserName={currentUserName}
+            />
         </div>
     );
 };

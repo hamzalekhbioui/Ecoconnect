@@ -26,6 +26,7 @@ const transformPostRow = (
         mediaType: row.media_type,
         authorId: row.author_id,
         communityId: row.community_id,
+        status: row.status || 'pending',
         likeCount,
         commentCount,
         createdAt: row.created_at,
@@ -52,7 +53,7 @@ const transformCommentRow = (row: PostCommentRow): PostComment => ({
 });
 
 /**
- * Fetch posts for a specific community (paginated, newest first)
+ * Fetch PUBLISHED posts for a specific community (paginated, newest first)
  * Uses COUNT aggregation on post_likes and post_comments for accurate counts
  */
 export const fetchCommunityPosts = async (
@@ -70,6 +71,7 @@ export const fetchCommunityPosts = async (
             post_comments(count)
         `)
         .eq('community_id', communityId)
+        .eq('status', 'published')  // Only fetch published posts
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -283,6 +285,86 @@ export const deleteComment = async (commentId: string): Promise<void> => {
 
     if (error) {
         console.error('[postService] Error deleting comment:', error);
+        throw error;
+    }
+};
+
+// =============================================================================
+// POST MODERATION FUNCTIONS (Admin only)
+// =============================================================================
+
+/**
+ * Fetch PENDING posts for a community (Admin moderation)
+ */
+export const fetchPendingPosts = async (
+    communityId: string
+): Promise<Post[]> => {
+    const { data, error } = await supabase
+        .from('posts')
+        .select(`
+            *,
+            profiles:author_id(id, full_name, avatar_url),
+            post_likes(count),
+            post_comments(count)
+        `)
+        .eq('community_id', communityId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true }); // Oldest first for moderation
+
+    if (error) {
+        console.error('[postService] Error fetching pending posts:', error);
+        throw error;
+    }
+
+    return (data as PostRowWithCounts[]).map(row => transformPostRow(row));
+};
+
+/**
+ * Get count of pending posts for a community (for badge)
+ */
+export const fetchPendingPostsCount = async (
+    communityId: string
+): Promise<number> => {
+    const { count, error } = await supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('community_id', communityId)
+        .eq('status', 'pending');
+
+    if (error) {
+        console.error('[postService] Error fetching pending posts count:', error);
+        throw error;
+    }
+
+    return count ?? 0;
+};
+
+/**
+ * Approve a post (set status to 'published')
+ */
+export const approvePost = async (postId: string): Promise<void> => {
+    const { error } = await supabase
+        .from('posts')
+        .update({ status: 'published' })
+        .eq('id', postId);
+
+    if (error) {
+        console.error('[postService] Error approving post:', error);
+        throw error;
+    }
+};
+
+/**
+ * Reject a post (set status to 'rejected')
+ */
+export const rejectPost = async (postId: string): Promise<void> => {
+    const { error } = await supabase
+        .from('posts')
+        .update({ status: 'rejected' })
+        .eq('id', postId);
+
+    if (error) {
+        console.error('[postService] Error rejecting post:', error);
         throw error;
     }
 };

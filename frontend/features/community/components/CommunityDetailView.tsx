@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { RequestJoinModal } from './RequestJoinModal';
 import { CommunityMembersList } from './CommunityMembersList';
 import { CommunityEventsList } from './CommunityEventsList';
 import { FeedList } from './FeedList';
+import { PendingPostsPanel } from './PendingPostsPanel';
 import { supabase } from '../../../config/supabase';
+import { fetchPendingPostsCount } from '../services/postService';
 import { Community, SubCommunity, CommunityMember } from '../../../types';
 import { Loader2, Users } from 'lucide-react';
 
@@ -20,6 +22,8 @@ export const CommunityDetailView: React.FC = () => {
     const [communityAdminId, setCommunityAdminId] = useState<string | null>(null);
     const [subCommunities, setSubCommunities] = useState<SubCommunity[]>([]);
     const [membership, setMembership] = useState<CommunityMember | null>(null);
+    const [showPendingPosts, setShowPendingPosts] = useState(false);
+    const [pendingPostsCount, setPendingPostsCount] = useState(0);
 
     // Fetch community data from Supabase
     useEffect(() => {
@@ -93,6 +97,22 @@ export const CommunityDetailView: React.FC = () => {
 
     const isMember = membership?.status === 'approved';
     const isPending = membership?.status === 'pending';
+    const isAdmin = user?.id === communityAdminId;
+
+    // Fetch pending posts count for admins
+    const loadPendingPostsCount = useCallback(async () => {
+        if (!isAdmin || !community?.id) return;
+        try {
+            const count = await fetchPendingPostsCount(community.id);
+            setPendingPostsCount(count);
+        } catch (err) {
+            console.error('[CommunityDetailView] Error fetching pending posts count:', err);
+        }
+    }, [isAdmin, community?.id]);
+
+    useEffect(() => {
+        loadPendingPostsCount();
+    }, [loadPendingPostsCount]);
 
     // Handle join request
     const handleJoinRequest = async (message: string) => {
@@ -297,7 +317,7 @@ export const CommunityDetailView: React.FC = () => {
 
                         {/* Action Button */}
                         <div>
-                            {isMember ? (
+                            {isMember || isAdmin ? (
                                 <button
                                     onClick={() => navigate(`/dashboard/my-communities`)}
                                     className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-full transition-colors"
@@ -371,6 +391,30 @@ export const CommunityDetailView: React.FC = () => {
                                             </p>
                                         </div>
                                     </div>
+
+                                    {/* Admin Moderation Panel */}
+                                    {isAdmin && (
+                                        <div className="mt-4 pt-4 border-t border-gray-100">
+                                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Admin Tools</h3>
+                                            <button
+                                                onClick={() => setShowPendingPosts(!showPendingPosts)}
+                                                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${showPendingPosts
+                                                    ? 'bg-amber-100 text-amber-700'
+                                                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-[20px]">pending_actions</span>
+                                                    <span className="font-medium">Pending Posts</span>
+                                                </div>
+                                                {pendingPostsCount > 0 && (
+                                                    <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">
+                                                        {pendingPostsCount}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -378,6 +422,33 @@ export const CommunityDetailView: React.FC = () => {
 
                     {/* Right Column - Feed, Sub-Communities, Events, Members */}
                     <div className="lg:col-span-2">
+                        {/* Pending Posts Panel - Admin Only */}
+                        {isAdmin && showPendingPosts && (
+                            <div className="mb-10">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-amber-500">pending_actions</span>
+                                        <h2 className="text-xl font-bold text-gray-900">Pending Posts</h2>
+                                        {pendingPostsCount > 0 && (
+                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-sm font-medium rounded-full">
+                                                {pendingPostsCount} awaiting review
+                                            </span>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={() => setShowPendingPosts(false)}
+                                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined">close</span>
+                                    </button>
+                                </div>
+                                <PendingPostsPanel
+                                    communityId={community.id}
+                                    onPostModerated={loadPendingPostsCount}
+                                />
+                            </div>
+                        )}
+
                         {/* Community Feed - Only for approved members */}
                         {isMember && (
                             <div className="mb-10">
