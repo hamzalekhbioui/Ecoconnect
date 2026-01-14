@@ -1,5 +1,5 @@
 import { supabase } from '../../../config/supabase';
-import { Post, PostRow, PostComment, PostCommentRow } from '../../../types';
+import { Post, PostRow, PostComment, PostCommentRow, UserPost, UserPostRow } from '../../../types';
 
 // Extended row type with aggregated counts
 interface PostRowWithCounts extends PostRow {
@@ -45,6 +45,7 @@ const transformCommentRow = (row: PostCommentRow): PostComment => ({
     authorId: row.author_id,
     content: row.content,
     createdAt: row.created_at,
+    likeCount: row.like_count ?? 0,
     author: row.profiles ? {
         id: row.profiles.id,
         fullName: row.profiles.full_name,
@@ -367,4 +368,78 @@ export const rejectPost = async (postId: string): Promise<void> => {
         console.error('[postService] Error rejecting post:', error);
         throw error;
     }
+};
+
+// =============================================================================
+// USER POST HISTORY (Dashboard)
+// =============================================================================
+
+// Extended row type with community data
+interface UserPostRowWithCounts extends UserPostRow {
+    post_likes: { count: number }[];
+    post_comments: { count: number }[];
+}
+
+/**
+ * Transform user post row to frontend type with community info
+ */
+const transformUserPostRow = (row: UserPostRowWithCounts): UserPost => {
+    const likeCount = row.post_likes?.[0]?.count ?? row.like_count ?? 0;
+    const commentCount = row.post_comments?.[0]?.count ?? row.comment_count ?? 0;
+
+    return {
+        id: row.id,
+        content: row.content,
+        mediaUrl: row.media_url,
+        mediaType: row.media_type,
+        authorId: row.author_id,
+        communityId: row.community_id,
+        status: row.status || 'pending',
+        likeCount,
+        commentCount,
+        createdAt: row.created_at,
+        author: row.profiles ? {
+            id: row.profiles.id,
+            fullName: row.profiles.full_name,
+            avatarUrl: row.profiles.avatar_url,
+        } : undefined,
+        community: row.communities ? {
+            id: row.communities.id,
+            name: row.communities.name,
+            slug: row.communities.slug,
+            coverImage: row.communities.cover_image,
+        } : undefined,
+    };
+};
+
+/**
+ * Fetch all published posts by a specific user (for Dashboard)
+ * Joins communities table to get community name and icon
+ * Uses COUNT aggregation on post_likes and post_comments
+ * Sorted by newest first (created_at DESC)
+ */
+export const fetchUserPosts = async (
+    userId: string,
+    limit: number = 10
+): Promise<UserPost[]> => {
+    const { data, error } = await supabase
+        .from('posts')
+        .select(`
+            *,
+            profiles:author_id(id, full_name, avatar_url),
+            communities:community_id(id, name, slug, cover_image),
+            post_likes(count),
+            post_comments(count)
+        `)
+        .eq('author_id', userId)
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        console.error('[postService] Error fetching user posts:', error);
+        throw error;
+    }
+
+    return (data as UserPostRowWithCounts[]).map(transformUserPostRow);
 };

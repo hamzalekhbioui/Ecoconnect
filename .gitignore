@@ -4,8 +4,8 @@
 .env.*.local
 
 # Database Files
+
 database/
-*.sql
 *.sqlite
 *.sqlite3
 *.db

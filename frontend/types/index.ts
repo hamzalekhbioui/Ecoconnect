@@ -267,3 +267,25 @@ export interface PostCommentRow {
     avatar_url?: string;
   };
 }
+
+// =============================================================================
+// User Post Types (for Dashboard)
+// =============================================================================
+
+export interface UserPost extends Post {
+  community?: {
+    id: string;
+    name: string;
+    slug: string;
+    coverImage?: string;
+  };
+}
+
+export interface UserPostRow extends PostRow {
+  communities?: {
+    id: string;
+    name: string;
+    slug: string;
+    cover_image?: string;
+  };
+}

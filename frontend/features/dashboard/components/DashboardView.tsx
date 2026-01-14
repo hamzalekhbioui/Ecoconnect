@@ -12,6 +12,9 @@ import {
   rejectFriendRequest,
   Friendship,
 } from '../../community/services/friendshipService';
+import { fetchUserPosts } from '../../community/services/postService';
+import { UserPostCard } from './UserPostCard';
+import { UserPost } from '../../../types';
 
 // Mock data for the dashboard
 const STATS = [
@@ -26,30 +29,7 @@ const RECOMMENDED = [
   { id: 'r3', type: 'Resource', typeColor: 'bg-[#13ec5b] text-gray-900', title: 'Circular Toolkit v2', subtitle: 'PDF • Free Download' }
 ];
 
-const NEWS_POSTS = [
-  {
-    id: 'n1',
-    author: 'Sarah Jenning',
-    role: 'shared a project in Eco-Designers',
-    time: '2h ago',
-    avatar: 'https://picsum.photos/seed/sarah/100/100',
-    content: "Just finished our first prototype for the biodegradable packaging initiative! We used mycelium composites grown locally. Looking for feedback on water resistance coatings if anyone has experience?",
-    image: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600&q=80',
-    likes: 24,
-    comments: 8
-  },
-  {
-    id: 'n2',
-    author: 'Symbiosis Team',
-    role: 'Announcement',
-    time: '5h ago',
-    avatar: '',
-    content: 'We are excited to launch the new "Skills Swap" feature in the Marketplace! Now you can officially trade hours of expertise without any currency exchange. Check your Finance & Exchange tab to set up your wallet.',
-    image: null,
-    likes: 156,
-    comments: 12
-  }
-];
+// NEWS_POSTS removed - replaced with dynamic My Posts section
 
 // EVENTS removed - replaced with dynamic UpcomingEventsWidget
 
@@ -385,6 +365,10 @@ export const DashboardView: React.FC = () => {
   const [friendRequestsLoading, setFriendRequestsLoading] = useState(true);
   const [processingFriendRequestId, setProcessingFriendRequestId] = useState<string | null>(null);
 
+  // My Posts state (replaces Community News)
+  const [myPosts, setMyPosts] = useState<UserPost[]>([]);
+  const [myPostsLoading, setMyPostsLoading] = useState(true);
+
   // Fetch user's marketplace listings
   useEffect(() => {
     const fetchMyListings = async () => {
@@ -411,6 +395,27 @@ export const DashboardView: React.FC = () => {
     };
 
     fetchMyListings();
+  }, [user]);
+
+  // Fetch user's posts for My Posts section
+  useEffect(() => {
+    const fetchMyPosts = async () => {
+      if (!user) {
+        setMyPostsLoading(false);
+        return;
+      }
+
+      try {
+        const posts = await fetchUserPosts(user.id, 10);
+        setMyPosts(posts);
+      } catch (err) {
+        console.error('Error fetching user posts:', err);
+      } finally {
+        setMyPostsLoading(false);
+      }
+    };
+
+    fetchMyPosts();
   }, [user]);
 
   // Fetch user's communities (joined and created)
@@ -1229,39 +1234,28 @@ export const DashboardView: React.FC = () => {
               </div>
             </div>
 
-            {/* Community News */}
+            {/* My Posts */}
             <div>
-              <h3 className="font-semibold text-gray-900 mb-4">Community News</h3>
-              <div className="space-y-4">
-                {NEWS_POSTS.map(post => (
-                  <div key={post.id} className="bg-white rounded-xl border border-gray-100 p-4">
-                    <div className="flex items-start gap-3 mb-3">
-                      {post.avatar ? (
-                        <img src={post.avatar} alt={post.author} className="w-10 h-10 rounded-full" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">S</span>
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-semibold text-gray-900 text-sm">{post.author}</p>
-                        <p className="text-xs text-gray-500">{post.role} • {post.time}</p>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-700 mb-3 leading-relaxed">{post.content}</p>
-                    {post.image && (
-                      <div className="rounded-lg overflow-hidden mb-3">
-                        <img src={post.image} alt="Post" className="w-full h-48 object-cover" />
-                      </div>
-                    )}
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>{post.likes} Likes</span>
-                      <span>{post.comments} Comments</span>
-                      <span className="ml-auto">Share</span>
-                    </div>
+              <h3 className="font-semibold text-gray-900 mb-4">My Posts</h3>
+              {myPostsLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : myPosts.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 p-6 text-center">
+                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <span className="material-symbols-outlined text-gray-400">edit_note</span>
                   </div>
-                ))}
-              </div>
+                  <p className="text-gray-500 text-sm mb-2">You haven't posted anything yet</p>
+                  <p className="text-xs text-gray-400">Join a community and share your first post!</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {myPosts.map(post => (
+                    <UserPostCard key={post.id} post={post} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
