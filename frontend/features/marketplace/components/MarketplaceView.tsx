@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../config/supabase';
 import { useAuth } from '../../../hooks/useAuth';
-import { FEATURED_LISTINGS } from '../../../config/constants';
 import { CreateListingModal } from './CreateListingModal';
 import { ListingDetailsModal, MarketplaceListingData } from './ListingDetailsModal';
 import { Loader2 } from 'lucide-react';
@@ -190,48 +189,7 @@ export const MarketplaceView: React.FC = () => {
         </div>
       </div>
 
-      {/* Featured Hero Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Left Banner */}
-          <div
-            className="relative rounded-2xl overflow-hidden h-72 bg-cover bg-center"
-            style={{ backgroundImage: `linear-gradient(to right, rgba(13, 40, 24, 0.95) 50%, rgba(13, 40, 24, 0.4) 100%), url('${FEATURED_LISTINGS[0].backgroundImage}')` }}
-          >
-            <div className="absolute inset-0 p-6 flex flex-col justify-between">
-              <span className="inline-flex w-fit bg-[#13ec5b] text-[10px] font-bold text-gray-900 px-2.5 py-1 rounded uppercase tracking-wide">
-                {FEATURED_LISTINGS[0].badge}
-              </span>
-              <div>
-                <h3 className="text-2xl font-bold text-white mb-2">{FEATURED_LISTINGS[0].title}</h3>
-                <p className="text-gray-300 text-sm mb-4 max-w-xs">{FEATURED_LISTINGS[0].description}</p>
-                <button className="inline-flex items-center bg-[#13ec5b] hover:bg-[#0fd64f] text-gray-900 font-semibold px-4 py-2 rounded-full text-sm transition-colors">
-                  {FEATURED_LISTINGS[0].buttonText}
-                </button>
-              </div>
-            </div>
-          </div>
 
-          {/* Right Banner */}
-          <div
-            className="relative rounded-2xl overflow-hidden h-72 bg-cover bg-center"
-            style={{ backgroundImage: `linear-gradient(to right, rgba(13, 40, 24, 0.9) 40%, rgba(13, 40, 24, 0.3) 100%), url('${FEATURED_LISTINGS[1].backgroundImage}')` }}
-          >
-            <div className="absolute inset-0 p-6 flex flex-col justify-between">
-              <span className="inline-flex w-fit bg-[#13ec5b] text-[10px] font-bold text-gray-900 px-2.5 py-1 rounded uppercase tracking-wide">
-                {FEATURED_LISTINGS[1].badge}
-              </span>
-              <div>
-                <h3 className="text-2xl font-bold text-white mb-2">{FEATURED_LISTINGS[1].title}</h3>
-                <p className="text-gray-300 text-sm mb-4 max-w-xs">{FEATURED_LISTINGS[1].description}</p>
-                <button className="inline-flex items-center bg-white hover:bg-gray-100 text-gray-900 font-semibold px-4 py-2 rounded-full text-sm transition-colors">
-                  {FEATURED_LISTINGS[1].buttonText}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Listings Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">

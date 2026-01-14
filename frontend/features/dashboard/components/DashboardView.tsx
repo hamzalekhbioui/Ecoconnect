@@ -16,20 +16,7 @@ import { fetchUserPosts } from '../../community/services/postService';
 import { UserPostCard } from './UserPostCard';
 import { UserPost } from '../../../types';
 
-// Mock data for the dashboard
-const STATS = [
-  { value: '12', label: 'Exchanges this month', highlight: true },
-  { value: '5', label: 'Pending requests', highlight: true },
-  { value: '85%', label: 'Profile completion', highlight: false }
-];
-
-const RECOMMENDED = [
-  { id: 'r1', type: 'Event', typeColor: 'bg-[#13ec5b] text-gray-900', title: 'Regenerative Business', subtitle: 'Workshop • Tomorrow' },
-  { id: 'r2', type: 'Contact', typeColor: 'bg-white border border-gray-200 text-gray-600', title: 'Maria Gonzales', subtitle: 'Sustainable Textile Expert' },
-  { id: 'r3', type: 'Resource', typeColor: 'bg-[#13ec5b] text-gray-900', title: 'Circular Toolkit v2', subtitle: 'PDF • Free Download' }
-];
-
-// NEWS_POSTS removed - replaced with dynamic My Posts section
+// Mock data removed - Stats and Recommended sections deleted
 
 // EVENTS removed - replaced with dynamic UpcomingEventsWidget
 
@@ -1203,36 +1190,7 @@ export const DashboardView: React.FC = () => {
               <p className="text-sm text-gray-500">Here is what's happening in your ecosystem today.</p>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              {STATS.map((stat, idx) => (
-                <div key={idx} className="bg-white rounded-xl border border-gray-100 p-4">
-                  <p className={`text-2xl font-bold ${stat.highlight ? 'text-[#13ec5b]' : 'text-gray-900'}`}>
-                    {stat.value}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">{stat.label}</p>
-                </div>
-              ))}
-            </div>
 
-            {/* Recommended for you */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900">Recommended for you</h3>
-                <button className="text-sm text-[#13ec5b] hover:underline">See all</button>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {RECOMMENDED.map(item => (
-                  <div key={item.id} className="bg-white rounded-xl border border-gray-100 p-3 hover:shadow-md transition-shadow cursor-pointer">
-                    <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded mb-2 ${item.typeColor}`}>
-                      {item.type}
-                    </span>
-                    <h4 className="font-semibold text-sm text-gray-900">{item.title}</h4>
-                    <p className="text-xs text-gray-500 mt-0.5">{item.subtitle}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
 
             {/* My Posts */}
             <div>

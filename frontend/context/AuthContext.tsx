@@ -95,11 +95,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Get initial session with timeout to prevent infinite loading
         const initializeAuth = async () => {
             try {
-                // Force sign out on app startup - user must log in fresh
-                await supabase.auth.signOut();
-                setUser(null);
-                setSession(null);
-                setProfile(null);
+                // CRITICAL: Recover existing session from localStorage
+                const { data: { session: existingSession }, error } = await supabase.auth.getSession();
+
+                if (error) {
+                    console.error('Error getting session:', error);
+                    setSession(null);
+                    setUser(null);
+                    setProfile(null);
+                    return;
+                }
+
+                if (existingSession?.user) {
+                    // Session exists - restore auth state
+                    setSession(existingSession);
+                    setUser(existingSession.user);
+
+                    // Fetch profile for the authenticated user
+                    const profileData = await fetchProfile(existingSession.user.id);
+                    setProfile(profileData);
+                    profileFetchedRef.current = true;
+                    cachedProfileIdRef.current = existingSession.user.id;
+
+                    console.log('[AuthContext] Session recovered for user:', existingSession.user.email);
+                } else {
+                    // No session - user is not logged in
+                    setSession(null);
+                    setUser(null);
+                    setProfile(null);
+                }
             } catch (error) {
                 console.error('Error initializing auth:', error);
                 setSession(null);
