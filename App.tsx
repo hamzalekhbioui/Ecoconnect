@@ -9,7 +9,7 @@ import { MarketplaceView } from './frontend/features/marketplace/components/Mark
 import { DashboardView } from './frontend/features/dashboard/components/DashboardView';
 import { CommunitiesLandingView } from './frontend/features/community/components/CommunitiesLandingView';
 import { CommunityDetailView } from './frontend/features/community/components/CommunityDetailView';
-import { SubCommunityDashboard } from './frontend/features/community/components/SubCommunityDashboard';
+
 import { MyCommunitiesView } from './frontend/features/community/components/MyCommunitiesView';
 import { MessagingView } from './frontend/features/messaging/components/MessagingView';
 import { AccueilView } from './frontend/features/ai-assistant/components/AccueilView';
@@ -201,13 +201,7 @@ function AppContent() {
           </MainLayoutWrapper>
         } />
 
-        <Route path="/communities/:slug/sub/:subId" element={
-          <ProtectedRoute>
-            <MainLayoutWrapper>
-              <SubCommunityDashboard />
-            </MainLayoutWrapper>
-          </ProtectedRoute>
-        } />
+
 
         <Route path="/dashboard/my-communities" element={
           <ProtectedRoute>

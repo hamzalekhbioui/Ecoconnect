@@ -8,7 +8,7 @@ import { FeedList } from './FeedList';
 import { PendingPostsPanel } from './PendingPostsPanel';
 import { supabase } from '../../../config/supabase';
 import { fetchPendingPostsCount } from '../services/postService';
-import { Community, SubCommunity, CommunityMember } from '../../../types';
+import { Community, CommunityMember } from '../../../types';
 import { Loader2, Users } from 'lucide-react';
 
 export const CommunityDetailView: React.FC = () => {
@@ -20,7 +20,7 @@ export const CommunityDetailView: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [community, setCommunity] = useState<Community | null>(null);
     const [communityAdminId, setCommunityAdminId] = useState<string | null>(null);
-    const [subCommunities, setSubCommunities] = useState<SubCommunity[]>([]);
+
     const [membership, setMembership] = useState<CommunityMember | null>(null);
     const [showPendingPosts, setShowPendingPosts] = useState(false);
     const [pendingPostsCount, setPendingPostsCount] = useState(0);
@@ -59,9 +59,6 @@ export const CommunityDetailView: React.FC = () => {
                 setCommunity(transformedCommunity);
                 setCommunityAdminId(communityData.created_by || null);
 
-                // Fetch sub-communities for this parent (if sub_communities table exists)
-                // For now, sub-communities are not implemented in the database
-                setSubCommunities([]);
 
                 // Check if current user is a member
                 if (user?.id && communityData.id) {
@@ -208,48 +205,6 @@ export const CommunityDetailView: React.FC = () => {
         );
     }
 
-    const SubCommunityCard: React.FC<{ subCommunity: SubCommunity }> = ({ subCommunity }) => (
-        <div
-            onClick={() => isMember && navigate(`/communities/${slug}/sub/${subCommunity.id}`)}
-            className={`bg-white rounded-xl border border-gray-100 overflow-hidden transition-all ${isMember
-                ? 'hover:shadow-lg cursor-pointer transform hover:-translate-y-1'
-                : 'opacity-75'
-                }`}
-        >
-            {/* Image */}
-            <div className="h-32 relative">
-                {subCommunity.coverImage ? (
-                    <img
-                        src={subCommunity.coverImage}
-                        alt={subCommunity.name}
-                        className="w-full h-full object-cover"
-                    />
-                ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-emerald-400 to-teal-500" />
-                )}
-                {!isMember && (
-                    <div className="absolute inset-0 bg-gray-900/40 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-3xl text-white/80">lock</span>
-                    </div>
-                )}
-            </div>
-
-            {/* Content */}
-            <div className="p-4">
-                {subCommunity.focusArea && (
-                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-wide">
-                        {subCommunity.focusArea}
-                    </span>
-                )}
-                <h3 className="text-lg font-bold text-gray-900 mt-2 mb-1">{subCommunity.name}</h3>
-                <p className="text-sm text-gray-500 line-clamp-2 mb-3">{subCommunity.description}</p>
-                <div className="flex items-center gap-1.5 text-gray-400 text-sm">
-                    <span className="material-symbols-outlined text-[16px]">group</span>
-                    <span>{subCommunity.memberCount} members</span>
-                </div>
-            </div>
-        </div>
-    );
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -308,11 +263,7 @@ export const CommunityDetailView: React.FC = () => {
                                 <span className="font-semibold text-gray-900">{community.memberCount.toLocaleString()}</span>
                                 <span className="text-gray-500">members</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-gray-400">diversity_2</span>
-                                <span className="font-semibold text-gray-900">{subCommunities.length}</span>
-                                <span className="text-gray-500">sub-communities</span>
-                            </div>
+
                         </div>
 
                         {/* Action Button */}
@@ -466,29 +417,6 @@ export const CommunityDetailView: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-gray-900">Sub-Communities</h2>
-                            {!isMember && (
-                                <span className="text-sm text-gray-500 flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-[16px]">info</span>
-                                    Join to access
-                                </span>
-                            )}
-                        </div>
-
-                        {subCommunities.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {subCommunities.map(sc => (
-                                    <SubCommunityCard key={sc.id} subCommunity={sc} />
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
-                                <span className="material-symbols-outlined text-5xl text-gray-300 mb-3">diversity_2</span>
-                                <h3 className="text-lg font-semibold text-gray-700 mb-1">No sub-communities yet</h3>
-                                <p className="text-gray-500">This community hasn't created any sub-communities yet.</p>
-                            </div>
-                        )}
 
                         {/* Community Events */}
                         {(isMember || (user?.id && communityAdminId === user.id)) && (

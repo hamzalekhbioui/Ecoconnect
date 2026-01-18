@@ -58,17 +58,6 @@ export interface Community {
   updatedAt?: string;
 }
 
-export interface SubCommunity {
-  id: string;
-  parentCommunityId: string;
-  name: string;
-  description: string;
-  focusArea?: string;
-  coverImage?: string;
-  memberCount: number;
-  createdAt?: string;
-  updatedAt?: string;
-}
 
 export interface CommunityMember {
   id: string;
@@ -87,21 +76,6 @@ export interface CommunityMember {
   };
 }
 
-export interface SubCommunityMember {
-  id: string;
-  userId: string;
-  subCommunityId: string;
-  role: CommunityRole;
-  joinedAt: string;
-  // Joined from profiles table
-  user?: {
-    id: string;
-    fullName: string;
-    avatarUrl?: string;
-    bio?: string;
-    skills?: string[];
-  };
-}
 
 // Filter options for community discovery
 export interface CommunityFilters {
