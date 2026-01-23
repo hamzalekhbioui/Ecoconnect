@@ -5,7 +5,7 @@
 
 # Database Files
 
-database/
+/database
 *.sqlite
 *.sqlite3
 *.db
@@ -42,3 +42,17 @@ Thumbs.db
 .cache/
 .eslintcache
 .vite/
+
+# AI Assistant & Editor Tool Folders
+.agent/
+.agents/
+.claude/
+.cursor/
+.gemini/
+.windsurf/
+
+# Backend specific
+backend/.env
+backend/node_modules/
+backend/dist/
+
