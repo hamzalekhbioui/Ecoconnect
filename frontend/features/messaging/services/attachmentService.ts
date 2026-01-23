@@ -1,101 +1,70 @@
-import { supabase } from '../../../config/supabase';
-
-export type AttachmentType = 'image' | 'document';
+import { api } from '../../../config/api';
 
 /**
- * Upload a file attachment to the chat-attachments bucket.
- * Files are stored with the pattern: {conversationId}/{timestamp}_{filename}
+ * Extract filename from a URL.
+ */
+export const getFilenameFromUrl = (url: string): string => {
+    try {
+        const pathname = new URL(url).pathname;
+        const filename = pathname.split('/').pop() || 'file';
+        // Remove timestamp prefix if present (e.g., "1234567890_filename.pdf" -> "filename.pdf")
+        const parts = filename.split('_');
+        if (parts.length > 1 && /^\d+$/.test(parts[0])) {
+            return parts.slice(1).join('_');
+        }
+        return filename;
+    } catch {
+        return 'file';
+    }
+};
+
+// Supported file types
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const ALLOWED_DOCUMENT_TYPES = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+/**
+ * Validate and upload an attachment to the backend.
  * 
  * @param file - The file to upload
- * @param conversationId - The conversation ID (used as folder path for RLS)
- * @returns Object containing the public URL and attachment type
+ * @returns Object with the public URL and file type
  */
 export const uploadAttachment = async (
-    file: File,
-    conversationId: string
-): Promise<{ url: string; type: AttachmentType }> => {
-    // Determine attachment type based on MIME type
-    const type: AttachmentType = file.type.startsWith('image/') ? 'image' : 'document';
-
-    // Generate collision-free filename: {conversationId}/{timestamp}_{originalFilename}
-    const timestamp = Date.now();
-    const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const filePath = `${conversationId}/${timestamp}_${sanitizedFilename}`;
-
-    console.log('[uploadAttachment] Uploading file:', {
-        originalName: file.name,
-        path: filePath,
-        type,
-        size: file.size
-    });
-
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-        .from('chat-attachments')
-        .upload(filePath, file, {
-            cacheControl: '3600',
-            upsert: false,
-        });
-
-    if (error) {
-        console.error('[uploadAttachment] Upload error:', error);
-        throw new Error(`Failed to upload attachment: ${error.message}`);
+    file: File
+): Promise<{ url: string; type: 'image' | 'document' }> => {
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+        throw new Error('File size must be less than 10MB');
     }
 
-    console.log('[uploadAttachment] Upload successful:', data.path);
-
-    // Create a signed URL for the file (valid for 1 hour)
-    // This is required for private buckets
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-        .from('chat-attachments')
-        .createSignedUrl(data.path, 3600); // 3600 seconds = 1 hour
-
-    if (signedUrlError || !signedUrlData) {
-        console.error('[uploadAttachment] Signed URL error:', signedUrlError);
-        // Fallback to public URL if signed URL fails
-        const { data: urlData } = supabase.storage
-            .from('chat-attachments')
-            .getPublicUrl(data.path);
-        return {
-            url: urlData.publicUrl,
-            type,
-        };
+    // Determine file type
+    let fileType: 'image' | 'document';
+    if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        fileType = 'image';
+    } else if (ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
+        fileType = 'document';
+    } else {
+        throw new Error('Unsupported file type. Please upload an image or document.');
     }
+
+    const result = await api.uploadFile('/api/upload/chat-attachment', file);
 
     return {
-        url: signedUrlData.signedUrl,
-        type,
+        url: result.url,
+        type: fileType,
     };
 };
 
 /**
  * Delete an attachment from storage.
  * 
- * @param filePath - The full path to the file in the bucket
+ * @param filePath - The path to the file in storage
  */
 export const deleteAttachment = async (filePath: string): Promise<void> => {
-    const { error } = await supabase.storage
-        .from('chat-attachments')
-        .remove([filePath]);
-
-    if (error) {
-        console.error('[deleteAttachment] Delete error:', error);
-        throw new Error(`Failed to delete attachment: ${error.message}`);
-    }
-};
-
-/**
- * Extract filename from attachment URL.
- */
-export const getFilenameFromUrl = (url: string): string => {
-    try {
-        const urlObj = new URL(url);
-        const pathParts = urlObj.pathname.split('/');
-        const filename = pathParts[pathParts.length - 1];
-        // Remove timestamp prefix (format: {timestamp}_{filename})
-        const underscoreIndex = filename.indexOf('_');
-        return underscoreIndex > 0 ? filename.substring(underscoreIndex + 1) : filename;
-    } catch {
-        return 'attachment';
-    }
+    await api.delete(`/api/upload/chat-attachments/${encodeURIComponent(filePath)}`);
 };

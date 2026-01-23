@@ -1,45 +1,37 @@
-import { supabase } from '../../../config/supabase';
+import { api } from '../../../config/api';
 import { Message } from '../types/messaging';
+import { supabase } from '../../../config/supabase';
+
+// =============================================================================
+// NOTE: Some functions still use direct Supabase access for features not yet
+// implemented in the backend (blocking). These will be migrated in Phase 2.
+// =============================================================================
 
 /**
  * Remove a friendship (unfriend action).
  * Both parties can delete friendships.
  */
 export const removeFriend = async (friendshipId: string): Promise<void> => {
-    const { error } = await supabase
-        .from('friendships')
-        .delete()
-        .eq('id', friendshipId);
-
-    if (error) {
-        console.error('[removeFriend] Error:', error);
-        throw error;
-    }
+    await api.delete(`/api/friendships/${friendshipId}`);
 };
 
 /**
  * Find friendship between two users.
  */
-export const findFriendship = async (userId1: string, userId2: string): Promise<{ id: string } | null> => {
-    const { data, error } = await supabase
-        .from('friendships')
-        .select('id')
-        .or(`and(requester_id.eq.${userId1},receiver_id.eq.${userId2}),and(requester_id.eq.${userId2},receiver_id.eq.${userId1})`)
-        .eq('status', 'accepted')
-        .maybeSingle();
-
-    if (error) {
-        console.error('[findFriendship] Error:', error);
-        throw error;
+export const findFriendship = async (userId1: string, _userId2: string): Promise<{ id: string } | null> => {
+    const result = await api.get<{ friendshipId: string | null; status: string | null }>(`/api/friendships/status/${userId1}`);
+    if (result.friendshipId && result.status === 'accepted') {
+        return { id: result.friendshipId };
     }
-
-    return data;
+    return null;
 };
 
 /**
  * Block a user. This will also auto-unfriend via database trigger.
+ * TODO: Implement blocking endpoint in backend
  */
 export const blockUser = async (blockerId: string, blockedId: string): Promise<void> => {
+    // Temporarily use direct Supabase until blocking endpoint is implemented
     const { error } = await supabase
         .from('blocked_users')
         .insert({
@@ -55,8 +47,10 @@ export const blockUser = async (blockerId: string, blockedId: string): Promise<v
 
 /**
  * Unblock a user.
+ * TODO: Implement blocking endpoint in backend
  */
 export const unblockUser = async (blockerId: string, blockedId: string): Promise<void> => {
+    // Temporarily use direct Supabase until blocking endpoint is implemented
     const { error } = await supabase
         .from('blocked_users')
         .delete()
@@ -71,8 +65,10 @@ export const unblockUser = async (blockerId: string, blockedId: string): Promise
 
 /**
  * Check if a user has blocked another user.
+ * TODO: Implement blocking endpoint in backend
  */
 export const isUserBlocked = async (blockerId: string, blockedId: string): Promise<boolean> => {
+    // Temporarily use direct Supabase until blocking endpoint is implemented
     const { data, error } = await supabase
         .from('blocked_users')
         .select('id')
@@ -90,8 +86,10 @@ export const isUserBlocked = async (blockerId: string, blockedId: string): Promi
 
 /**
  * Check if current user is blocked BY another user (they blocked us).
+ * TODO: Implement blocking endpoint in backend
  */
 export const isBlockedByUser = async (currentUserId: string, otherUserId: string): Promise<boolean> => {
+    // Temporarily use direct Supabase until blocking endpoint is implemented
     const { data, error } = await supabase
         .from('blocked_users')
         .select('id')
@@ -111,27 +109,41 @@ export const isBlockedByUser = async (currentUserId: string, otherUserId: string
  * Get the last N messages from a conversation (for report context).
  */
 export const getLastMessages = async (conversationId: string, count: number = 5): Promise<Message[]> => {
-    const { data, error } = await supabase
-        .from('messages')
-        .select(`
-            *,
-            sender:profiles!messages_sender_id_fkey(id, full_name, avatar_url)
-        `)
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
-        .limit(count);
+    const messages = await api.get<Array<{
+        id: string;
+        conversationId: string;
+        senderId: string;
+        content: string;
+        attachmentUrl?: string;
+        attachmentType?: string;
+        isRead: boolean;
+        createdAt: string;
+        sender?: { id: string; full_name: string; avatar_url?: string };
+    }>>(`/api/messages/${conversationId}`);
 
-    if (error) {
-        console.error('[getLastMessages] Error:', error);
-        throw error;
-    }
+    // Get last N and reverse to chronological order
+    const lastN = messages.slice(-count).reverse();
 
-    // Reverse to get chronological order
-    return (data || []).reverse() as Message[];
+    return lastN.map(m => ({
+        id: m.id,
+        conversation_id: m.conversationId,
+        sender_id: m.senderId,
+        content: m.content,
+        attachment_url: m.attachmentUrl,
+        attachment_type: m.attachmentType as 'image' | 'document' | undefined,
+        is_read: m.isRead,
+        created_at: m.createdAt,
+        sender: m.sender ? {
+            id: m.sender.id,
+            full_name: m.sender.full_name,
+            avatar_url: m.sender.avatar_url ?? null,
+        } : undefined,
+    }));
 };
 
 /**
  * Report a user.
+ * TODO: Implement reporting endpoint in backend
  */
 export const reportUser = async (
     reporterId: string,
@@ -149,6 +161,7 @@ export const reportUser = async (
         created_at: msg.created_at
     }));
 
+    // Temporarily use direct Supabase until reporting endpoint is implemented
     const { error } = await supabase
         .from('reports')
         .insert({

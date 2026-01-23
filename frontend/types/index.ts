@@ -158,7 +158,7 @@ export interface Message {
 // Community Post Types
 // =============================================================================
 
-export type PostMediaType = 'image';
+export type PostMediaType = 'image' | 'video';
 export type PostStatus = 'pending' | 'published' | 'rejected';
 
 export interface Post {

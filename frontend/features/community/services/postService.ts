@@ -1,249 +1,157 @@
-import { supabase } from '../../../config/supabase';
-import { Post, PostRow, PostComment, PostCommentRow, UserPost, UserPostRow } from '../../../types';
+import { api, buildQueryString } from '../../../config/api';
+import { Post, PostComment, UserPost } from '../../../types';
 
-// Extended row type with aggregated counts
-interface PostRowWithCounts extends PostRow {
-    post_likes: { count: number }[];
-    post_comments: { count: number }[];
-}
+// =============================================================================
+// TYPES
+// =============================================================================
 
-/**
- * Transform database row to frontend type
- */
-const transformPostRow = (
-    row: PostRowWithCounts,
-    currentUserId?: string,
-    likedPostIds?: Set<string>
-): Post => {
-    // Extract counts from aggregated data (Supabase returns array with count object)
-    const likeCount = row.post_likes?.[0]?.count ?? row.like_count ?? 0;
-    const commentCount = row.post_comments?.[0]?.count ?? row.comment_count ?? 0;
-
-    return {
-        id: row.id,
-        content: row.content,
-        mediaUrl: row.media_url,
-        mediaType: row.media_type,
-        authorId: row.author_id,
-        communityId: row.community_id,
-        status: row.status || 'pending',
-        likeCount,
-        commentCount,
-        createdAt: row.created_at,
-        author: row.profiles ? {
-            id: row.profiles.id,
-            fullName: row.profiles.full_name,
-            avatarUrl: row.profiles.avatar_url,
-        } : undefined,
-        isLiked: likedPostIds ? likedPostIds.has(row.id) : false,
-    };
-};
-
-const transformCommentRow = (row: PostCommentRow): PostComment => ({
-    id: row.id,
-    postId: row.post_id,
-    authorId: row.author_id,
-    content: row.content,
-    createdAt: row.created_at,
-    likeCount: row.like_count ?? 0,
-    author: row.profiles ? {
-        id: row.profiles.id,
-        fullName: row.profiles.full_name,
-        avatarUrl: row.profiles.avatar_url,
-    } : undefined,
-});
-
-/**
- * Fetch PUBLISHED posts for a specific community (paginated, newest first)
- * Uses COUNT aggregation on post_likes and post_comments for accurate counts
- */
-export const fetchCommunityPosts = async (
-    communityId: string,
-    currentUserId?: string,
-    limit: number = 20,
-    offset: number = 0
-): Promise<Post[]> => {
-    const { data, error } = await supabase
-        .from('posts')
-        .select(`
-            *,
-            profiles:author_id(id, full_name, avatar_url),
-            post_likes(count),
-            post_comments(count)
-        `)
-        .eq('community_id', communityId)
-        .eq('status', 'published')  // Only fetch published posts
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-    if (error) {
-        console.error('[postService] Error fetching community posts:', error);
-        throw error;
-    }
-
-    // Fetch which posts the current user has liked
-    let likedPostIds = new Set<string>();
-    if (currentUserId && data && data.length > 0) {
-        const postIds = data.map(p => p.id);
-        const { data: likes } = await supabase
-            .from('post_likes')
-            .select('post_id')
-            .eq('user_id', currentUserId)
-            .in('post_id', postIds);
-
-        if (likes) {
-            likedPostIds = new Set(likes.map(l => l.post_id));
-        }
-    }
-
-    return (data as PostRowWithCounts[]).map(row => transformPostRow(row, currentUserId, likedPostIds));
-};
-
-/**
- * Create a new post
- */
 export interface CreatePostInput {
     communityId: string;
     content: string;
     mediaFile?: File;
 }
 
+interface ApiPost {
+    id: string;
+    communityId: string;
+    authorId: string;
+    content: string;
+    mediaUrl?: string;
+    mediaType?: string;
+    status: string;
+    createdAt: string;
+    updatedAt?: string;
+    author?: { id: string; full_name: string; avatar_url?: string };
+    community?: { id: string; name: string; slug: string; cover_image?: string };
+    likeCount: number;
+    commentCount: number;
+    isLiked: boolean;
+}
+
+interface ApiComment {
+    id: string;
+    postId: string;
+    authorId: string;
+    content: string;
+    parentId?: string;
+    createdAt: string;
+    author?: { id: string; full_name: string; avatar_url?: string };
+}
+
+// =============================================================================
+// TRANSFORMERS
+// =============================================================================
+
+const transformApiPost = (apiPost: ApiPost): Post => ({
+    id: apiPost.id,
+    content: apiPost.content,
+    mediaUrl: apiPost.mediaUrl,
+    mediaType: apiPost.mediaType as 'image' | 'video' | undefined,
+    authorId: apiPost.authorId,
+    communityId: apiPost.communityId,
+    status: apiPost.status as 'pending' | 'published' | 'rejected',
+    likeCount: apiPost.likeCount,
+    commentCount: apiPost.commentCount,
+    createdAt: apiPost.createdAt,
+    author: apiPost.author ? {
+        id: apiPost.author.id,
+        fullName: apiPost.author.full_name,
+        avatarUrl: apiPost.author.avatar_url,
+    } : undefined,
+    isLiked: apiPost.isLiked,
+});
+
+const transformApiComment = (apiComment: ApiComment): PostComment => ({
+    id: apiComment.id,
+    postId: apiComment.postId,
+    authorId: apiComment.authorId,
+    content: apiComment.content,
+    parentId: apiComment.parentId,
+    createdAt: apiComment.createdAt,
+    likeCount: 0,
+    author: apiComment.author ? {
+        id: apiComment.author.id,
+        fullName: apiComment.author.full_name,
+        avatarUrl: apiComment.author.avatar_url,
+    } : undefined,
+});
+
+const transformApiUserPost = (apiPost: ApiPost): UserPost => ({
+    ...transformApiPost(apiPost),
+    community: apiPost.community ? {
+        id: apiPost.community.id,
+        name: apiPost.community.name,
+        slug: apiPost.community.slug,
+        coverImage: apiPost.community.cover_image,
+    } : undefined,
+});
+
+// =============================================================================
+// POST FUNCTIONS
+// =============================================================================
+
+/**
+ * Fetch PUBLISHED posts for a specific community (paginated, newest first)
+ */
+export const fetchCommunityPosts = async (
+    communityId: string,
+    _currentUserId?: string,
+    limit: number = 20,
+    offset: number = 0
+): Promise<Post[]> => {
+    const query = buildQueryString({ communityId, limit, offset });
+    const posts = await api.get<ApiPost[]>(`/api/posts${query}`);
+    return posts.map(transformApiPost);
+};
+
+/**
+ * Create a new post
+ */
 export const createPost = async (
     input: CreatePostInput,
-    authorId: string
+    _authorId: string
 ): Promise<Post> => {
     let mediaUrl: string | undefined;
+    let mediaType: 'image' | 'video' | undefined;
 
     // Upload media if provided
     if (input.mediaFile) {
-        const fileExt = input.mediaFile.name.split('.').pop();
-        const fileName = `${authorId}/${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-            .from('post-media')
-            .upload(fileName, input.mediaFile, {
-                cacheControl: '3600',
-                upsert: false,
-            });
-
-        if (uploadError) {
-            console.error('[postService] Error uploading media:', uploadError);
-            throw uploadError;
-        }
-
-        const { data: urlData } = supabase.storage
-            .from('post-media')
-            .getPublicUrl(fileName);
-
-        mediaUrl = urlData.publicUrl;
+        const uploadResult = await api.uploadFile('/api/upload/post-media', input.mediaFile);
+        mediaUrl = uploadResult.url;
+        mediaType = 'image';
     }
 
-    // Insert the post
-    const { data, error } = await supabase
-        .from('posts')
-        .insert({
-            community_id: input.communityId,
-            author_id: authorId,
-            content: input.content,
-            media_url: mediaUrl,
-            media_type: mediaUrl ? 'image' : null,
-        })
-        .select(`
-            *,
-            profiles:author_id(id, full_name, avatar_url)
-        `)
-        .single();
+    const post = await api.post<ApiPost>('/api/posts', {
+        communityId: input.communityId,
+        content: input.content,
+        mediaUrl,
+        mediaType,
+    });
 
-    if (error) {
-        console.error('[postService] Error creating post:', error);
-        throw error;
-    }
-
-    // For newly created posts, likes and comments are 0
-    const postWithCounts: PostRowWithCounts = {
-        ...(data as PostRow),
-        post_likes: [{ count: 0 }],
-        post_comments: [{ count: 0 }],
-    };
-    return transformPostRow(postWithCounts, authorId, new Set());
+    return transformApiPost(post);
 };
 
 /**
  * Delete a post
  */
 export const deletePost = async (postId: string): Promise<void> => {
-    const { error } = await supabase
-        .from('posts')
-        .delete()
-        .eq('id', postId);
-
-    if (error) {
-        console.error('[postService] Error deleting post:', error);
-        throw error;
-    }
+    await api.delete(`/api/posts/${postId}`);
 };
 
 /**
  * Toggle like on a post (like if not liked, unlike if already liked)
  */
-export const toggleLike = async (postId: string, userId: string): Promise<boolean> => {
-    // Check if already liked
-    const { data: existingLike } = await supabase
-        .from('post_likes')
-        .select('id')
-        .eq('post_id', postId)
-        .eq('user_id', userId)
-        .single();
-
-    if (existingLike) {
-        // Unlike
-        const { error } = await supabase
-            .from('post_likes')
-            .delete()
-            .eq('post_id', postId)
-            .eq('user_id', userId);
-
-        if (error) {
-            console.error('[postService] Error unliking post:', error);
-            throw error;
-        }
-        return false; // Now not liked
-    } else {
-        // Like
-        const { error } = await supabase
-            .from('post_likes')
-            .insert({
-                post_id: postId,
-                user_id: userId,
-            });
-
-        if (error) {
-            console.error('[postService] Error liking post:', error);
-            throw error;
-        }
-        return true; // Now liked
-    }
+export const toggleLike = async (postId: string, _userId: string): Promise<boolean> => {
+    const result = await api.post<{ liked: boolean }>(`/api/posts/${postId}/like`);
+    return result.liked;
 };
 
 /**
  * Fetch comments for a post
  */
 export const fetchPostComments = async (postId: string): Promise<PostComment[]> => {
-    const { data, error } = await supabase
-        .from('post_comments')
-        .select(`
-            *,
-            profiles:author_id(id, full_name, avatar_url)
-        `)
-        .eq('post_id', postId)
-        .order('created_at', { ascending: true });
-
-    if (error) {
-        console.error('[postService] Error fetching comments:', error);
-        throw error;
-    }
-
-    return (data as PostCommentRow[]).map(transformCommentRow);
+    const comments = await api.get<ApiComment[]>(`/api/posts/${postId}/comments`);
+    return comments.map(transformApiComment);
 };
 
 /**
@@ -251,43 +159,22 @@ export const fetchPostComments = async (postId: string): Promise<PostComment[]> 
  */
 export const addComment = async (
     postId: string,
-    authorId: string,
-    content: string
+    _authorId: string,
+    content: string,
+    parentId?: string
 ): Promise<PostComment> => {
-    const { data, error } = await supabase
-        .from('post_comments')
-        .insert({
-            post_id: postId,
-            author_id: authorId,
-            content,
-        })
-        .select(`
-            *,
-            profiles:author_id(id, full_name, avatar_url)
-        `)
-        .single();
-
-    if (error) {
-        console.error('[postService] Error adding comment:', error);
-        throw error;
-    }
-
-    return transformCommentRow(data as PostCommentRow);
+    const comment = await api.post<ApiComment>(`/api/posts/${postId}/comments`, {
+        content,
+        parentId,
+    });
+    return transformApiComment(comment);
 };
 
 /**
  * Delete a comment
  */
 export const deleteComment = async (commentId: string): Promise<void> => {
-    const { error } = await supabase
-        .from('post_comments')
-        .delete()
-        .eq('id', commentId);
-
-    if (error) {
-        console.error('[postService] Error deleting comment:', error);
-        throw error;
-    }
+    await api.delete(`/api/posts/comments/${commentId}`);
 };
 
 // =============================================================================
@@ -297,149 +184,45 @@ export const deleteComment = async (commentId: string): Promise<void> => {
 /**
  * Fetch PENDING posts for a community (Admin moderation)
  */
-export const fetchPendingPosts = async (
-    communityId: string
-): Promise<Post[]> => {
-    const { data, error } = await supabase
-        .from('posts')
-        .select(`
-            *,
-            profiles:author_id(id, full_name, avatar_url),
-            post_likes(count),
-            post_comments(count)
-        `)
-        .eq('community_id', communityId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: true }); // Oldest first for moderation
-
-    if (error) {
-        console.error('[postService] Error fetching pending posts:', error);
-        throw error;
-    }
-
-    return (data as PostRowWithCounts[]).map(row => transformPostRow(row));
+export const fetchPendingPosts = async (communityId: string): Promise<Post[]> => {
+    const posts = await api.get<ApiPost[]>(`/api/posts/pending/${communityId}`);
+    return posts.map(transformApiPost);
 };
 
 /**
  * Get count of pending posts for a community (for badge)
  */
-export const fetchPendingPostsCount = async (
-    communityId: string
-): Promise<number> => {
-    const { count, error } = await supabase
-        .from('posts')
-        .select('*', { count: 'exact', head: true })
-        .eq('community_id', communityId)
-        .eq('status', 'pending');
-
-    if (error) {
-        console.error('[postService] Error fetching pending posts count:', error);
-        throw error;
-    }
-
-    return count ?? 0;
+export const fetchPendingPostsCount = async (communityId: string): Promise<number> => {
+    const result = await api.get<{ count: number }>(`/api/posts/pending/${communityId}/count`);
+    return result.count;
 };
 
 /**
  * Approve a post (set status to 'published')
  */
 export const approvePost = async (postId: string): Promise<void> => {
-    const { error } = await supabase
-        .from('posts')
-        .update({ status: 'published' })
-        .eq('id', postId);
-
-    if (error) {
-        console.error('[postService] Error approving post:', error);
-        throw error;
-    }
+    await api.patch(`/api/posts/${postId}/approve`);
 };
 
 /**
  * Reject a post (set status to 'rejected')
  */
 export const rejectPost = async (postId: string): Promise<void> => {
-    const { error } = await supabase
-        .from('posts')
-        .update({ status: 'rejected' })
-        .eq('id', postId);
-
-    if (error) {
-        console.error('[postService] Error rejecting post:', error);
-        throw error;
-    }
+    await api.patch(`/api/posts/${postId}/reject`);
 };
 
 // =============================================================================
 // USER POST HISTORY (Dashboard)
 // =============================================================================
 
-// Extended row type with community data
-interface UserPostRowWithCounts extends UserPostRow {
-    post_likes: { count: number }[];
-    post_comments: { count: number }[];
-}
-
-/**
- * Transform user post row to frontend type with community info
- */
-const transformUserPostRow = (row: UserPostRowWithCounts): UserPost => {
-    const likeCount = row.post_likes?.[0]?.count ?? row.like_count ?? 0;
-    const commentCount = row.post_comments?.[0]?.count ?? row.comment_count ?? 0;
-
-    return {
-        id: row.id,
-        content: row.content,
-        mediaUrl: row.media_url,
-        mediaType: row.media_type,
-        authorId: row.author_id,
-        communityId: row.community_id,
-        status: row.status || 'pending',
-        likeCount,
-        commentCount,
-        createdAt: row.created_at,
-        author: row.profiles ? {
-            id: row.profiles.id,
-            fullName: row.profiles.full_name,
-            avatarUrl: row.profiles.avatar_url,
-        } : undefined,
-        community: row.communities ? {
-            id: row.communities.id,
-            name: row.communities.name,
-            slug: row.communities.slug,
-            coverImage: row.communities.cover_image,
-        } : undefined,
-    };
-};
-
 /**
  * Fetch all published posts by a specific user (for Dashboard)
- * Joins communities table to get community name and icon
- * Uses COUNT aggregation on post_likes and post_comments
- * Sorted by newest first (created_at DESC)
  */
 export const fetchUserPosts = async (
     userId: string,
     limit: number = 10
 ): Promise<UserPost[]> => {
-    const { data, error } = await supabase
-        .from('posts')
-        .select(`
-            *,
-            profiles:author_id(id, full_name, avatar_url),
-            communities:community_id(id, name, slug, cover_image),
-            post_likes(count),
-            post_comments(count)
-        `)
-        .eq('author_id', userId)
-        .eq('status', 'published')
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-    if (error) {
-        console.error('[postService] Error fetching user posts:', error);
-        throw error;
-    }
-
-    return (data as UserPostRowWithCounts[]).map(transformUserPostRow);
+    const query = buildQueryString({ limit });
+    const posts = await api.get<ApiPost[]>(`/api/posts/user/${userId}${query}`);
+    return posts.map(transformApiUserPost);
 };

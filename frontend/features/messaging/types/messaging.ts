@@ -3,7 +3,7 @@
 export interface UserProfile {
     id: string;
     full_name: string;
-    avatar_url: string | null;
+    avatar_url: string | null | undefined;
 }
 
 export interface Message {
@@ -40,3 +40,4 @@ export interface ConversationRow {
     participant_2_profile: UserProfile;
     latest_message: Message[] | null;
 }
+

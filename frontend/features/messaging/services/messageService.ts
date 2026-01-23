@@ -1,5 +1,49 @@
-import { supabase } from '../../../config/supabase';
+import { api } from '../../../config/api';
 import { Message } from '../types/messaging';
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+interface ApiMessage {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    content: string;
+    attachmentUrl?: string;
+    attachmentType?: 'image' | 'document';
+    isRead: boolean;
+    createdAt: string;
+    sender?: {
+        id: string;
+        full_name: string;
+        avatar_url?: string;
+    };
+}
+
+// =============================================================================
+// TRANSFORMERS
+// =============================================================================
+
+const transformApiMessage = (apiMsg: ApiMessage): Message => ({
+    id: apiMsg.id,
+    conversation_id: apiMsg.conversationId,
+    sender_id: apiMsg.senderId,
+    content: apiMsg.content,
+    attachment_url: apiMsg.attachmentUrl,
+    attachment_type: apiMsg.attachmentType,
+    is_read: apiMsg.isRead,
+    created_at: apiMsg.createdAt,
+    sender: apiMsg.sender ? {
+        id: apiMsg.sender.id,
+        full_name: apiMsg.sender.full_name,
+        avatar_url: apiMsg.sender.avatar_url ?? null,
+    } : undefined,
+});
+
+// =============================================================================
+// MESSAGE FUNCTIONS
+// =============================================================================
 
 /**
  * Send a new message in a conversation.
@@ -7,74 +51,25 @@ import { Message } from '../types/messaging';
  */
 export const sendMessage = async (
     conversationId: string,
-    senderId: string,
+    _senderId: string,
     content: string,
     attachment?: { url: string; type: 'image' | 'document' }
 ): Promise<Message> => {
-    console.log('[sendMessage] Inserting message:', {
+    const message = await api.post<ApiMessage>('/api/messages', {
         conversationId,
-        senderId,
         content,
-        hasAttachment: !!attachment
+        attachmentUrl: attachment?.url,
+        attachmentType: attachment?.type,
     });
-
-    const insertData: {
-        conversation_id: string;
-        sender_id: string;
-        content: string;
-        attachment_url?: string;
-        attachment_type?: string;
-    } = {
-        conversation_id: conversationId,
-        sender_id: senderId,
-        content
-    };
-
-    // Add attachment fields if provided
-    if (attachment) {
-        insertData.attachment_url = attachment.url;
-        insertData.attachment_type = attachment.type;
-    }
-
-    const { data, error } = await supabase
-        .from('messages')
-        .insert(insertData)
-        .select('*')
-        .single();
-
-    if (error) {
-        console.error('[sendMessage] Insert error:', error);
-        throw error;
-    }
-
-    console.log('[sendMessage] Message inserted successfully:', data);
-    return data as Message;
+    return transformApiMessage(message);
 };
 
 /**
  * Fetch all messages for a conversation.
  */
 export const fetchMessages = async (conversationId: string): Promise<Message[]> => {
-    console.log('[fetchMessages] Fetching messages for conversation:', conversationId);
-
-    const { data, error } = await supabase
-        .from('messages')
-        .select(`
-            *,
-            sender:profiles!messages_sender_id_fkey(id, full_name, avatar_url)
-        `)
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-
-    if (error) {
-        console.error('[fetchMessages] Error:', error);
-        throw error;
-    }
-
-    console.log('[fetchMessages] Fetched', data?.length || 0, 'messages');
-    console.log('[fetchMessages] Message sender_ids:', data?.map(m => m.sender_id));
-
-    return data as Message[];
+    const messages = await api.get<ApiMessage[]>(`/api/messages/${conversationId}`);
+    return messages.map(transformApiMessage);
 };
 
 /**
@@ -82,26 +77,14 @@ export const fetchMessages = async (conversationId: string): Promise<Message[]> 
  */
 export const markMessagesAsRead = async (
     conversationId: string,
-    currentUserId: string
+    _currentUserId: string
 ): Promise<void> => {
-    const { error } = await supabase
-        .from('messages')
-        .update({ is_read: true })
-        .eq('conversation_id', conversationId)
-        .neq('sender_id', currentUserId)
-        .eq('is_read', false);
-
-    if (error) throw error;
+    await api.patch(`/api/messages/read/${conversationId}`);
 };
 
 /**
  * Delete a message (only allowed for sender).
  */
 export const deleteMessage = async (messageId: string): Promise<void> => {
-    const { error } = await supabase
-        .from('messages')
-        .delete()
-        .eq('id', messageId);
-
-    if (error) throw error;
+    await api.delete(`/api/messages/${messageId}`);
 };
