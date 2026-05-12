@@ -56,3 +56,6 @@ backend/.env
 backend/node_modules/
 backend/dist/
 
+# Migration secrets — NEVER commit the real file
+scripts/.env.migrate
+
