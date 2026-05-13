@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ChatResponseDto } from './dto/chat.dto';
 import { CommunityDataService } from './communityData.service';
 
@@ -9,9 +9,11 @@ interface ChatMessage {
 
 @Injectable()
 export class ChatService {
+    private readonly logger = new Logger(ChatService.name);
     private conversationHistory: Map<string, ChatMessage[]> = new Map();
     private readonly baseSystemPrompt: string;
     private readonly apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
+    private readonly isProduction = process.env.NODE_ENV === 'production';
     private communityDataService: CommunityDataService;
 
     constructor() {
@@ -37,7 +39,10 @@ Use emojis sparingly to be friendly but professional.`;
             const contextData = await this.communityDataService.buildContextString();
             return this.baseSystemPrompt + contextData;
         } catch (err) {
-            console.error('Failed to build context, using base prompt:', err);
+            this.logger.warn('Failed to build chat context. Using base prompt.');
+            this.logDebug('Chat context build error details', {
+                error: err instanceof Error ? err.message : 'Unknown error',
+            });
             return this.baseSystemPrompt;
         }
     }
@@ -76,10 +81,11 @@ Use emojis sparingly to be friendly but professional.`;
                 }
             }
 
-            // Debug: Log the request
-            console.log('=== OpenRouter Request ===');
-            console.log('Model: google/gemma-3-12b-it:free');
-            console.log('Messages:', JSON.stringify(apiMessages, null, 2));
+            this.logDebug('Dispatching OpenRouter chat request', {
+                model: 'google/gemma-3-12b-it:free',
+                sessionId: currentSessionId,
+                messageCount: apiMessages.length,
+            });
 
             // Make direct API call to OpenRouter
             const response = await fetch(this.apiUrl, {
@@ -97,18 +103,26 @@ Use emojis sparingly to be friendly but professional.`;
                 })
             });
 
-            // Debug: Log raw response status
-            console.log('=== OpenRouter Response ===');
-            console.log('Status:', response.status, response.statusText);
+            this.logDebug('OpenRouter response received', {
+                sessionId: currentSessionId,
+                status: response.status,
+                statusText: response.statusText,
+            });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Error response body:', errorText);
-                throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+                this.logger.error('OpenRouter returned a non-success status', JSON.stringify({
+                    sessionId: currentSessionId,
+                    status: response.status,
+                    statusText: response.statusText,
+                }));
+                throw new Error('OpenRouter API request failed');
             }
 
             const data = await response.json();
-            console.log('Response data:', JSON.stringify(data, null, 2));
+            this.logDebug('OpenRouter response parsed successfully', {
+                sessionId: currentSessionId,
+                hasChoices: Array.isArray(data?.choices) && data.choices.length > 0,
+            });
 
             // Extract the assistant's response
             const assistantContent = data.choices?.[0]?.message?.content || 'No response received';
@@ -125,24 +139,17 @@ Use emojis sparingly to be friendly but professional.`;
                 response: assistantContent,
                 sessionId: currentSessionId,
             };
-        } catch (error: any) {
-            console.error('OpenRouter Error:', error?.message || error);
+        } catch (error: unknown) {
+            this.logger.error('Chat completion failed', JSON.stringify({
+                sessionId: currentSessionId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            }));
 
             // Remove the failed user message from history
             history.pop();
 
-            // Provide more specific error message
-            let errorMessage = "I'm having trouble connecting right now.";
-            if (error?.message?.includes('API key') || error?.message?.includes('401')) {
-                errorMessage = "Invalid API key. Please check your OPENROUTER_API_KEY in .env file.";
-            } else if (error?.message?.includes('quota') || error?.message?.includes('billing')) {
-                errorMessage = "API quota exceeded. Please check your OpenRouter account.";
-            } else if (error?.message?.includes('rate') || error?.message?.includes('429')) {
-                errorMessage = "Rate limited. Please wait a moment and try again.";
-            }
-
             return {
-                response: `${errorMessage} (Error: ${error?.message || 'Unknown error'})`,
+                response: 'Service unavailable',
                 sessionId: currentSessionId,
             };
         }
@@ -154,6 +161,19 @@ Use emojis sparingly to be friendly but professional.`;
 
     private generateSessionId(): string {
         return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    }
+
+    private logDebug(message: string, metadata?: Record<string, unknown>): void {
+        if (this.isProduction) {
+            return;
+        }
+
+        if (metadata) {
+            this.logger.debug(`${message} ${JSON.stringify(metadata)}`);
+            return;
+        }
+
+        this.logger.debug(message);
     }
 }
 

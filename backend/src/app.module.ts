@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CommonModule } from './common/common.module';
 import { ChatModule } from './chat/chat.module';
 import { CommunitiesModule } from './modules/communities/communities.module';
@@ -17,6 +18,13 @@ import { UploadModule } from './modules/upload/upload.module';
         ConfigModule.forRoot({
             isGlobal: true,
         }),
+        ThrottlerModule.forRoot([
+            {
+                ttl: 60_000,
+                limit: 30,
+                getTracker: (req: Record<string, any>) => req.user?.id || req.ip || 'anonymous',
+            },
+        ]),
         CommonModule,
         ChatModule,
         CommunitiesModule,

@@ -1,7 +1,13 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { ChatService } from './chat.service';
 import { ChatDto, ChatResponseDto } from './dto/chat.dto';
+import { JwtAuthGuard } from '../common';
 
+@ApiTags('chat')
+@ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard, ThrottlerGuard)
 @Controller('chat')
 export class ChatController {
     constructor(private readonly chatService: ChatService) { }
